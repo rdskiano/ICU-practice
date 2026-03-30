@@ -1010,45 +1010,67 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh',
       background: C.ink, maxWidth: 768, margin: '0 auto' }}>
 
-      {/* Slim top bar with all info + metro */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-        padding: '5px 10px', flexShrink: 0,
+      {/* Top bar: exit + tempo (large) + metro toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10,
+        padding: '6px 12px', flexShrink: 0,
         borderBottom: `2px solid ${C.accent}`, background: C.ink }}>
-        <BackBtn onClick={onBack} label="←" />
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center',
-          gap: 10, minWidth: 0 }}>
-          {tempoBlock(true)}
-          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 13,
-            color: C.cream, letterSpacing: '0.08em', minWidth: 0 }}>
-            <div>PH {step.phase} · {safeIdx + 1}/{steps.length}</div>
-            <div style={{ color: atGoal ? C.accent : C.cream, fontSize: 12 }}>
-              {atGoal ? '★ GOAL' : `GOAL ${goalTempo}`}
-            </div>
+
+        {/* Exit back to params */}
+        <button onClick={onBack} style={{
+          background: 'none', border: `1px solid ${C.bord2}`,
+          color: C.cream, padding: '6px 10px', cursor: 'pointer',
+          fontFamily: "'Bebas Neue', sans-serif", fontSize: '0.85rem',
+          letterSpacing: '0.08em', flexShrink: 0,
+        }}>EXIT</button>
+
+        {/* Tempo — large and central */}
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontFamily: "'Bebas Neue', sans-serif",
+            fontSize: 'clamp(1.8rem, 7vw, 2.6rem)',
+            color: atGoal ? C.accent : C.cream, lineHeight: 1 }}>
+            ♩ = {step.tempo}
+            {pastGoal && <span style={{ fontSize: '0.4em', color: C.muted,
+              marginLeft: 10, verticalAlign: 'middle' }}>PAST GOAL</span>}
+          </div>
+          <div style={{ fontFamily: "'Bebas Neue', sans-serif",
+            fontSize: 13, color: C.cream, letterSpacing: '0.1em', marginTop: 1 }}>
+            {unitLabel}
           </div>
         </div>
-        <Btn onClick={() => setMetroOn(m => !m)} active={metroOn}
-          style={{ padding: '6px 14px', fontSize: '1rem' }}>
-          {metroOn ? '⏸' : '▶'}
-        </Btn>
+
+        {/* Metronome — large clear toggle */}
+        <button onClick={() => setMetroOn(m => !m)} style={{
+          background: metroOn ? C.accent : '#2a231d',
+          border: `2px solid ${metroOn ? C.accent : '#666'}`,
+          color: 'white', width: 52, height: 52,
+          cursor: 'pointer', fontSize: '1.4rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          {metroOn ? '⏸' : '♪'}
+        </button>
       </div>
 
       {progressBar}
       {photoBlock}
 
-      {/* Compact bottom controls */}
-      <div style={{ display: 'flex', gap: 6, padding: '8px 10px',
-        flexShrink: 0, borderTop: `1px solid ${C.bord}` }}>
-        <Btn onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}
-          style={{ flex: 1 }}>←</Btn>
-        <Btn onClick={() => setIdx(nextPhaseIdx)} disabled={!hasNextPhase}
-          style={{ flex: 2, borderColor: hasNextPhase ? C.accent : C.bord,
-            background: hasNextPhase ? C.accent : 'transparent',
-            color: hasNextPhase ? 'white' : C.dim }}>
-          +PHASE
+      {/* Bottom: NEXT PHASE | NEXT STEP — nothing else */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 0,
+        flexShrink: 0, borderTop: `2px solid ${C.bord}` }}>
+        <Btn onClick={() => setIdx(nextPhaseIdx)} disabled={!hasNextPhase} full
+          style={{ padding: '16px 8px', fontSize: '1rem',
+            borderRadius: 0, border: 'none',
+            borderRight: `1px solid ${C.bord}`,
+            background: hasNextPhase ? C.panel : 'transparent',
+            color: hasNextPhase ? C.cream : C.dim }}>
+          NEXT PHASE »
         </Btn>
         <Btn onClick={() => setIdx(i => Math.min(steps.length - 1, i + 1))}
-          disabled={idx >= steps.length - 1}
-          style={{ flex: 3, background: C.accent, color: 'white', borderColor: C.accent }}>
+          disabled={idx >= steps.length - 1} full
+          style={{ padding: '16px 8px', fontSize: '1.1rem',
+            borderRadius: 0, border: 'none',
+            background: idx >= steps.length - 1 ? 'transparent' : C.accent,
+            color: 'white' }}>
           NEXT STEP →
         </Btn>
       </div>
