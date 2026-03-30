@@ -22,6 +22,7 @@ const FONTS = `
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Bebas+Neue&family=Inconsolata:wght@400;600&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body, #root { height: 100%; }
+  body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
   body { font-family: 'Cormorant Garamond', Georgia, serif; background: ${C.ink}; }
   input[type=number], input[type=text], input[type=email] {
     background: ${C.panel}; color: ${C.cream};
