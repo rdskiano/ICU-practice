@@ -626,53 +626,59 @@ function LibraryScreen({ profile, onSelectPiece, onSignOut }) {
 function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers, setMarkers, onBack, onNext }) {
   const imgRef    = useRef();
   const canvasRef = useRef();
+  const imgRef2   = useRef();
+  const canvasRef2 = useRef();
   const [loaded, setLoaded]   = useState(false);
+  const [loaded2, setLoaded2] = useState(false);
   const land = useOrientation();
   const totalPages = pageImages.length;
+  const showTwoPages = land && totalPages > 1;
+  const rightPage = currentPage + 1 < totalPages ? currentPage + 1 : null;
 
   const drawArrow = (ctx, px, py, color) => {
-    const stemH = 22, headW = 7, headH = 7;
-    const tipY = py - 3, stemY = tipY - stemH;
-    ctx.strokeStyle = color; ctx.fillStyle = color;
-    ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(px, stemY); ctx.lineTo(px, tipY - headH); ctx.stroke();
+    const w = 10, h = 13;
+    // Solid downward-pointing triangle, tip just above the note
+    ctx.fillStyle = color;
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 4;
     ctx.beginPath();
-    ctx.moveTo(px - headW, tipY - headH);
-    ctx.lineTo(px + headW, tipY - headH);
-    ctx.lineTo(px, tipY);
+    ctx.moveTo(px - w, py - h - 2);
+    ctx.lineTo(px + w, py - h - 2);
+    ctx.lineTo(px, py - 2);
     ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
   };
 
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current, img = imgRef.current;
+  const drawPage = (canvas, img, pageIdx) => {
     if (!canvas || !img || !img.complete) return;
     const w = img.clientWidth, h = img.clientHeight;
     if (!w || !h) {
-      // dimensions not ready yet — wait a frame
       requestAnimationFrame(() => {
         const w2 = img.clientWidth, h2 = img.clientHeight;
         if (!w2 || !h2) return;
         canvas.width = w2; canvas.height = h2;
         canvas.style.width = w2 + 'px'; canvas.style.height = h2 + 'px';
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, w2, h2);
-        markers.filter(m => m.page === currentPage)
+        const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, w2, h2);
+        markers.filter(m => m.page === pageIdx)
           .forEach(m => drawArrow(ctx, m.x * w2, m.y * h2, C.accent));
       });
       return;
     }
     canvas.width = w; canvas.height = h;
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, w, h);
-    markers
-      .filter(m => m.page === currentPage)
+    const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, w, h);
+    markers.filter(m => m.page === pageIdx)
       .forEach(m => drawArrow(ctx, m.x * w, m.y * h, C.accent));
-  }, [markers, currentPage]);
+  };
+
+  const draw = useCallback(() => {
+    drawPage(canvasRef.current, imgRef.current, currentPage);
+    if (rightPage !== null)
+      drawPage(canvasRef2.current, imgRef2.current, rightPage);
+  }, [markers, currentPage, rightPage]);
 
   useEffect(() => { draw(); }, [draw]);
 
-  useEffect(() => { setLoaded(false); }, [currentPage]);
+  useEffect(() => { setLoaded(false); setLoaded2(false); }, [currentPage]);
 
   useEffect(() => {
     const ro = new ResizeObserver(() => draw());
@@ -683,20 +689,19 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
   // Redraw on orientation change
   useEffect(() => { draw(); }, [land, draw]);
 
-  const handleTap = e => {
-    const img = imgRef.current;
-    if (!img) return;
-    const rect = img.getBoundingClientRect();
+  const makeTapHandler = (pageIdx, imgEl) => e => {
+    if (!imgEl) return;
+    const rect = imgEl.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top)  / rect.height;
-    const hitX = 36 / img.clientWidth, hitY = 36 / img.clientHeight;
+    const hitX = 36 / imgEl.clientWidth, hitY = 36 / imgEl.clientHeight;
     const near = markers.findIndex(m =>
-      m.page === currentPage && Math.abs(m.x - x) < hitX && Math.abs(m.y - y) < hitY
+      m.page === pageIdx && Math.abs(m.x - x) < hitX && Math.abs(m.y - y) < hitY
     );
     if (near >= 0) {
       setMarkers(prev => prev.filter((_, i) => i !== near));
     } else {
-      setMarkers(prev => [...prev, { page: currentPage, x, y }]);
+      setMarkers(prev => [...prev, { page: pageIdx, x, y }]);
     }
   };
 
@@ -750,16 +755,34 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
         {pageNav}
       </div>
 
-      {/* Score */}
-      <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0,
-        background: '#0a0805', overflowY: 'auto' }}>
-        <img ref={imgRef} src={pageImages[currentPage]}
-          onLoad={() => { setLoaded(true); requestAnimationFrame(() => draw()); }}
-          onClick={handleTap}
-          style={{ width: '100%', display: 'block', cursor: 'crosshair', userSelect: 'none' }}
-          draggable={false} />
-        <canvas ref={canvasRef}
-          style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }} />
+      {/* Score — single page portrait, two pages landscape */}
+      <div style={{ flex: '1 1 0', minHeight: 0, background: '#0a0805',
+        display: 'flex', flexDirection: 'row' }}>
+
+        {/* Left / only page */}
+        <div style={{ position: 'relative', flex: 1, minWidth: 0, overflowY: 'auto' }}>
+          <img ref={imgRef} src={pageImages[currentPage]}
+            onLoad={() => { setLoaded(true); requestAnimationFrame(() => draw()); }}
+            onClick={makeTapHandler(currentPage, imgRef.current)}
+            style={{ width: '100%', display: 'block', cursor: 'crosshair', userSelect: 'none' }}
+            draggable={false} />
+          <canvas ref={canvasRef}
+            style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }} />
+        </div>
+
+        {/* Right page — landscape only */}
+        {showTwoPages && rightPage !== null && (
+          <div style={{ position: 'relative', flex: 1, minWidth: 0,
+            borderLeft: `1px solid ${C.bord}`, overflowY: 'auto' }}>
+            <img ref={imgRef2} src={pageImages[rightPage]}
+              onLoad={() => { setLoaded2(true); requestAnimationFrame(() => draw()); }}
+              onClick={makeTapHandler(rightPage, imgRef2.current)}
+              style={{ width: '100%', display: 'block', cursor: 'crosshair', userSelect: 'none' }}
+              draggable={false} />
+            <canvas ref={canvasRef2}
+              style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -866,7 +889,7 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
     if (markers[activeStart]) setCurrentPage(markers[activeStart].page);
   }, [step.units]);
 
-  useEffect(() => { setImgLoaded(false); }, [currentPage]);
+  useEffect(() => { setImgLoaded(false); setImgLoaded2(false); }, [currentPage]);
 
   useEffect(() => {
     if (metroOn) metro.current.start(step.tempo);
@@ -876,16 +899,15 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
   useEffect(() => () => metro.current.stop(), []);
 
   const drawArrow = (ctx, px, py, color, big) => {
-    const stemH = big ? 26 : 18, headW = big ? 7 : 5, headH = big ? 7 : 5;
-    const tipY = py - 3, stemY = tipY - stemH;
-    ctx.strokeStyle = color; ctx.fillStyle = color;
-    ctx.lineWidth = big ? 2.5 : 1.8; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(px, stemY); ctx.lineTo(px, tipY - headH); ctx.stroke();
+    const w = big ? 11 : 7, h = big ? 14 : 9;
+    ctx.fillStyle = color;
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = big ? 6 : 3;
     ctx.beginPath();
-    ctx.moveTo(px - headW, tipY - headH);
-    ctx.lineTo(px + headW, tipY - headH);
-    ctx.lineTo(px, tipY);
+    ctx.moveTo(px - w, py - h - 2);
+    ctx.lineTo(px + w, py - h - 2);
+    ctx.lineTo(px, py - 2);
     ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
   };
 
   const drawOverlay = useCallback(() => {
@@ -930,23 +952,72 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
 
   const totalPages = pageImages.length;
 
+  const imgRef2S   = useRef();
+  const canvasRef2S = useRef();
+  const [imgLoaded2, setImgLoaded2] = useState(false);
+  const showTwo = land && totalPages > 1;
+  const rightPageS = currentPage + 1 < totalPages ? currentPage + 1 : null;
+
+  // Two-page overlay draw
+  const drawPage2 = useCallback(() => {
+    const canvas = canvasRef2S.current, img = imgRef2S.current;
+    if (!canvas || !img || !img.complete || rightPageS === null) return;
+    const w = img.clientWidth, h = img.clientHeight;
+    if (!w || !h) return;
+    canvas.width = w; canvas.height = h;
+    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+    const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, w, h);
+    const activeStart = step.units[0];
+    const activeEnd   = Math.min(step.units[step.units.length - 1] + 1, markers.length - 1);
+    const GREEN = '#3db06a', RED = '#e05555';
+    markers.filter(m => m.page === rightPageS).forEach(m => {
+      const globalIdx = markers.indexOf(m);
+      const isStart = globalIdx === activeStart, isEnd = globalIdx === activeEnd;
+      const isActive = globalIdx >= activeStart && globalIdx <= activeEnd;
+      const color = isStart ? GREEN : isEnd ? RED : '#888';
+      ctx.globalAlpha = isActive ? 1 : 0.35;
+      drawArrow(ctx, m.x * w, m.y * h, color, isStart || isEnd);
+      ctx.globalAlpha = 1;
+    });
+  }, [step.units, markers, rightPageS]);
+
+  useEffect(() => { if (imgLoaded2) { drawPage2(); requestAnimationFrame(() => drawPage2()); } }, [imgLoaded2, drawPage2]);
+  useEffect(() => { drawPage2(); }, [land, drawPage2]);
+
   const photoBlock = (
-    <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0,
-      background: '#0a0805', overflowY: land ? 'hidden' : 'auto' }}>
-      <img ref={imgRef} src={pageImages[currentPage]}
-        onLoad={() => { setImgLoaded(true); requestAnimationFrame(() => drawOverlay()); }}
-        style={{ width: '100%', height: land ? '100%' : 'auto',
-          objectFit: land ? 'contain' : 'initial',
-          display: 'block', userSelect: 'none' }}
-        draggable={false} />
-      <canvas ref={canvasRef}
-        style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }} />
-      {/* Page indicators */}
-      {totalPages > 1 && (
-        <div style={{ position: 'absolute', bottom: 8, right: 10,
-          fontFamily: "'Inconsolata', monospace", fontSize: '0.7rem',
-          color: 'white', background: 'rgba(0,0,0,0.55)', padding: '2px 8px' }}>
-          p.{currentPage + 1}/{totalPages}
+    <div style={{ flex: '1 1 0', minHeight: 0, background: '#0a0805',
+      display: 'flex', flexDirection: 'row' }}>
+
+      {/* Left / only page */}
+      <div style={{ position: 'relative', flex: 1, minWidth: 0,
+        overflowY: land ? 'hidden' : 'auto' }}>
+        <img ref={imgRef} src={pageImages[currentPage]}
+          onLoad={() => { setImgLoaded(true); requestAnimationFrame(() => drawOverlay()); }}
+          style={{ width: '100%', height: land ? '100%' : 'auto',
+            objectFit: land ? 'contain' : 'initial', display: 'block', userSelect: 'none' }}
+          draggable={false} />
+        <canvas ref={canvasRef}
+          style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }} />
+        {totalPages > 1 && !showTwo && (
+          <div style={{ position: 'absolute', bottom: 8, right: 10,
+            fontFamily: "'Inconsolata', monospace", fontSize: '0.7rem',
+            color: 'white', background: 'rgba(0,0,0,0.55)', padding: '2px 8px' }}>
+            p.{currentPage + 1}/{totalPages}
+          </div>
+        )}
+      </div>
+
+      {/* Right page — landscape two-page spread */}
+      {showTwo && rightPageS !== null && (
+        <div style={{ position: 'relative', flex: 1, minWidth: 0,
+          borderLeft: `1px solid ${C.bord}`, overflowY: 'hidden' }}>
+          <img ref={imgRef2S} src={pageImages[rightPageS]}
+            onLoad={() => { setImgLoaded2(true); requestAnimationFrame(() => drawPage2()); }}
+            style={{ width: '100%', height: '100%', objectFit: 'contain',
+              display: 'block', userSelect: 'none' }}
+            draggable={false} />
+          <canvas ref={canvasRef2S}
+            style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }} />
         </div>
       )}
     </div>
