@@ -1737,7 +1737,7 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
       </div>
 
       <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex',flexDirection:'row'}}>
-        <div style={{position:'relative',flex:1,minWidth:0,overflowY:'auto'}}>
+        <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
           <img ref={imgRef} src={pageImages[currentPage]}
             onLoad={()=>{setLoaded(true);requestAnimationFrame(()=>draw());}}
             {...makeTouchHandlers(currentPage,()=>imgRef.current)}
@@ -1768,7 +1768,7 @@ function ParamsScreen({ N, startTempo, setStartTempo, goalTempo, setGoalTempo, i
   return (
     <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
       <TopBar left={<BackBtn onClick={onBack} />} center="SESSION SETUP" right={null} />
-      <div style={{flex:'1 1 0',overflowY:'auto',padding:'24px 20px',display:'flex',flexDirection:'column',gap:24,maxWidth:480,margin:'0 auto',width:'100%'}}>
+      <div style={{flex:'1 1 0',overflowY:'auto',padding:'16px 20px',display:'flex',flexDirection:'column',gap:16,maxWidth:540,margin:'0 auto',width:'100%'}}>
         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',color:C.cream,letterSpacing:'0.1em'}}>
           {N} UNIT{N!==1?'S':''}
         </div>
@@ -1776,13 +1776,13 @@ function ParamsScreen({ N, startTempo, setStartTempo, goalTempo, setGoalTempo, i
         <Spinner label="GOAL TEMPO"  value={goalTempo}  set={setGoalTempo}  min={startTempo+1} max={320} />
         <Spinner label="INCREMENT"   value={increment}  set={setIncrement}  min={1} max={40} />
         {valid && (
-          <div style={{padding:'12px 14px',background:C.panel,border:`1px solid ${C.bord2}`,
-            fontFamily:"'Inconsolata',monospace",fontSize:'1rem',color:C.cream,lineHeight:1.8}}>
+          <div style={{padding:'10px 14px',background:C.panel,border:`1px solid ${C.bord2}`,
+            fontFamily:"'Inconsolata',monospace",fontSize:'0.95rem',color:C.cream,lineHeight:1.7}}>
             {Math.floor((goalTempo-startTempo)/increment)+1} steps per phase &nbsp;&middot;&nbsp; {N} phases
           </div>
         )}
       </div>
-      <div style={{padding:'12px 20px',borderTop:`1px solid ${C.bord}`,flexShrink:0}}>
+      <div style={{padding:'10px 20px',borderTop:`1px solid ${C.bord}`,flexShrink:0,background:C.ink}}>
         <Btn onClick={onStart} disabled={!valid} big full
           style={{background:valid?C.accent:'transparent',color:valid?'white':C.dim,borderColor:valid?C.accent:C.bord,fontSize:'1.3rem',padding:'18px 24px',letterSpacing:'0.15em'}}>
           BEGIN SESSION →
@@ -1928,7 +1928,7 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
   const topBarContent = (compact) => (
     <div style={{flexShrink:0,borderBottom:`2px solid ${C.accent}`,background:C.ink}}>
       <div style={{display:'flex',alignItems:'center',gap:10,padding:compact?'4px 12px':'6px 12px'}}>
-        <button onClick={onBack} style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,padding:'4px 10px',cursor:'pointer',fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',letterSpacing:'0.08em',flexShrink:0}}>EXIT</button>
+        <button onClick={onBack} style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,padding:'6px 14px',cursor:'pointer',fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',letterSpacing:'0.1em',flexShrink:0}}>← EXIT</button>
         <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:12}}>
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?'clamp(1.4rem,4vw,2rem)':'clamp(1.8rem,7vw,2.6rem)',color:atGoal?C.accent:C.cream,lineHeight:1}}>
             ♩ = {step.tempo}
