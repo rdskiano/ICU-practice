@@ -129,13 +129,116 @@ const Btn = ({ children, onClick, active, disabled, big, full, style = {} }) => 
   }}>{children}</button>
 );
 
-const BackBtn = ({ onClick, label = '\u2190 BACK' }) => (
+const BackBtn = ({ onClick, label = '← BACK' }) => (
   <button onClick={onClick} style={{
     background: 'none', border: 'none', color: C.cream, padding: 0,
     fontFamily: "'Bebas Neue', sans-serif", fontSize: '0.85rem',
     letterSpacing: '0.1em', cursor: 'pointer',
   }}>{label}</button>
 );
+
+const HelpBtn = ({ onClick }) => (
+  <button onClick={onClick} style={{
+    background: 'none', border: `1px solid ${C.bord2}`, color: C.cream,
+    fontFamily: "'Bebas Neue', sans-serif", fontSize: '0.8rem',
+    letterSpacing: '0.1em', padding: '5px 12px', cursor: 'pointer',
+  }}>? HELP</button>
+);
+
+function HelpOverlay({ onClose }) {
+  const S = {
+    head: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1rem',
+      letterSpacing: '0.15em', color: C.accent, marginBottom: 6 },
+    body: { fontFamily: "'Cormorant Garamond', serif", fontSize: '1.05rem',
+      color: C.cream, lineHeight: 1.6 },
+    sec:  { marginBottom: 22 },
+  };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'flex-end',
+      justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: C.ink, border: `1px solid ${C.bord2}`,
+        width: '100%', maxWidth: 560, maxHeight: '85vh',
+        overflowY: 'auto', padding: '28px 24px',
+        borderRadius: '8px 8px 0 0',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', marginBottom: 24 }}>
+          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.3rem',
+            letterSpacing: '0.15em', color: C.cream }}>
+            HOW IT WORKS
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none',
+            color: C.cream, fontSize: '1.4rem', cursor: 'pointer' }}>×</button>
+        </div>
+
+        <div style={S.sec}>
+          <div style={S.head}>WHAT IS THE INTERLEAVED CLICK-UP METHOD?</div>
+          <div style={S.body}>
+            A proven technique for building speed gradually and cleanly. You start slow
+            and work up to your goal tempo one unit at a time, always connecting
+            each new unit back to what came before.
+          </div>
+        </div>
+
+        <div style={S.sec}>
+          <div style={S.head}>STEP 1 — ADD YOUR PIECE</div>
+          <div style={S.body}>
+            Upload a photo or PDF of the passage you want to practice.
+            You can upload a screenshot, a photo of your part, or a full PDF.
+            Once uploaded it stays in your library forever.
+          </div>
+        </div>
+
+        <div style={S.sec}>
+          <div style={S.head}>STEP 2 — MARK YOUR UNITS</div>
+          <div style={S.body}>
+            Tap the first note of each unit directly on the score.
+            A unit is typically one or two beats — whatever feels natural
+            as a building block for this passage.
+            Tap a marker to remove it. You need at least 2 markers to continue.
+          </div>
+        </div>
+
+        <div style={S.sec}>
+          <div style={S.head}>STEP 3 — SET YOUR TEMPOS</div>
+          <div style={S.body}>
+            Set a start tempo (slow enough to be completely clean),
+            a goal tempo (your target performance speed),
+            and an increment (how many BPM to jump each step — 5 is typical).
+          </div>
+        </div>
+
+        <div style={S.sec}>
+          <div style={S.head}>STEP 4 — PRACTICE</div>
+          <div style={S.body}>
+            The app guides you step by step. Green arrows show exactly where
+            to start and stop each time. Use <strong>NEXT STEP</strong> to move
+            to the next tempo within a phase, and <strong>NEXT PHASE</strong>
+            when you're ready to add a new unit. The metronome button turns
+            on a click at the current tempo.
+          </div>
+        </div>
+
+        <div style={S.sec}>
+          <div style={S.head}>THE OVERLAP RULE</div>
+          <div style={S.body}>
+            Every unit ends on the first note of the next unit.
+            This is intentional — it trains the connection between units,
+            which is where mistakes usually happen.
+          </div>
+        </div>
+
+        <button onClick={onClose} style={{
+          width: '100%', background: C.accent, color: 'white', border: 'none',
+          fontFamily: "'Bebas Neue', sans-serif", fontSize: '1rem',
+          letterSpacing: '0.12em', padding: '14px', cursor: 'pointer', marginTop: 8,
+        }}>GOT IT</button>
+      </div>
+    </div>
+  );
+}
 
 const Field = ({ label, children }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -158,11 +261,17 @@ const TopBar = ({ left, center, right }) => (
   </div>
 );
 
+
+/* ════════════════════════════════════════════════════════════════════════
+   HELP OVERLAY
+════════════════════════════════════════════════════════════════════════ */
+
 /* ════════════════════════════════════════════════════════════════════════
    ROOT APP
 ════════════════════════════════════════════════════════════════════════ */
 export default function ICUApp() {
   const [screen, setScreen]         = useState('signin');
+  const [showHelp, setShowHelp]       = useState(false);
   const [profile, setProfileState]  = useState(getProfile);
   const [piece, setPiece]           = useState(null);   // selected piece object
   const [pageImages, setPageImages] = useState([]);     // rendered page image URLs
@@ -184,6 +293,7 @@ export default function ICUApp() {
   return (
     <div style={{ minHeight: '100vh', background: C.ink, color: C.cream }}>
       <style>{FONTS}</style>
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
       {screen === 'signin' && (
         <SignInScreen onSignIn={p => { saveProfile(p); setScreen('library'); }} />
       )}
@@ -322,7 +432,7 @@ function SignInScreen({ onSignIn }) {
         </div>}
 
         <Btn onClick={submit} disabled={loading} big full>
-          {loading ? 'CHECKING...' : 'SIGN IN \u2192'}
+          {loading ? 'CHECKING...' : 'SIGN IN →'}
         </Btn>
       </div>
     </div>
@@ -336,6 +446,7 @@ function LibraryScreen({ profile, onSelectPiece, onSignOut }) {
   const [pieces, setPieces]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [title, setTitle]     = useState('');
   const [composer, setComposer] = useState('');
@@ -425,7 +536,7 @@ function LibraryScreen({ profile, onSelectPiece, onSignOut }) {
           left={<span style={{ fontFamily: "'Inconsolata', monospace", fontSize: '0.7rem',
             color: C.muted }}>{profile.name || profile.email}</span>}
           center="INTERLEAVED CLICK-UP"
-          right={<BackBtn onClick={onSignOut} label="SIGN OUT" />}
+          right={<div style={{display:'flex',gap:8}}><BackBtn onClick={() => {}} label="?"/><BackBtn onClick={onSignOut} label="SIGN OUT" /></div>}
         />
 
         <div style={{ flex: '1 1 0', overflowY: 'auto', padding: '16px' }}>
@@ -580,13 +691,13 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
   const pageNav = totalPages > 1 && (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
       <Btn onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-        disabled={currentPage === 0} style={{ padding: '6px 14px' }}>\u2190</Btn>
+        disabled={currentPage === 0} style={{ padding: '6px 14px' }}>←</Btn>
       <span style={{ fontFamily: "'Inconsolata', monospace", fontSize: '0.8rem',
         color: C.cream, minWidth: 60, textAlign: 'center' }}>
         p.{currentPage + 1} / {totalPages}
       </span>
       <Btn onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
-        disabled={currentPage === totalPages - 1} style={{ padding: '6px 14px' }}>\u2192</Btn>
+        disabled={currentPage === totalPages - 1} style={{ padding: '6px 14px' }}>→</Btn>
     </div>
   );
 
@@ -594,20 +705,21 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
       <TopBar
         left={<BackBtn onClick={onBack} />}
-        center={piece?.title || 'MARK UNITS'}
-        right={<Btn onClick={onNext} disabled={totalMarkers < 2}>NEXT \u2192</Btn>}
+        center="MARK UNITS"
+        right={<Btn onClick={onNext} disabled={totalMarkers < 2}>NEXT →</Btn>}
       />
 
       {/* Instruction + page nav */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '8px 16px', flexShrink: 0, borderBottom: `1px solid ${C.bord}`,
         gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 15, color: C.cream }}>
-          Tap the <em>first note</em> of each unit &middot;&nbsp;
-          <span style={{ color: C.accent, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.08em' }}>
-            {totalMarkers} marker{totalMarkers !== 1 ? 's' : ''} total
-            {pageMarkers > 0 ? ` (${pageMarkers} this page)` : ''}
-          </span>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, color: C.cream }}>
+          Tap the <em>first note</em> of each unit in order &mdash; at least 2 markers needed.
+        </div>
+        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 16,
+          letterSpacing: '0.08em', color: C.accent }}>
+          {totalMarkers} marker{totalMarkers !== 1 ? 's' : ''} placed
+          {pageMarkers > 0 && totalPages > 1 ? ` (${pageMarkers} this page)` : ''}
         </div>
         {pageNav}
       </div>
@@ -683,25 +795,30 @@ function ParamsScreen({ N, startTempo, setStartTempo, goalTempo, setGoalTempo,
         )}
 
         <div style={{ borderTop: `1px solid ${C.bord}`, paddingTop: 20,
-          display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Field label="Session title (optional)">
+          display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Field label="Session title (optional — save to library)">
             <input type="text" value={sessionTitle}
               onChange={e => setSessionTitle(e.target.value)}
               placeholder="e.g. Passage A, mm 45-52" />
           </Field>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Btn onClick={saveSession} disabled={!valid || saving}
-              style={{ flex: 1 }}>
-              {saving ? 'SAVING...' : '\u2191 SAVE SESSION'}
+              style={{ flex: 1, fontSize: '0.75rem', padding: '7px 10px',
+                borderColor: C.bord2, color: C.cream, background: 'transparent' }}>
+              {saving ? 'SAVING...' : '↑ SAVE TO LIBRARY'}
             </Btn>
             {saveMsg && <span style={{ fontFamily: "'Inconsolata', monospace",
-              fontSize: '0.75rem', color: C.gold, alignSelf: 'center' }}>{saveMsg}</span>}
+              fontSize: '0.75rem', color: C.gold }}>{saveMsg}</span>}
           </div>
         </div>
       </div>
 
       <div style={{ padding: '12px 20px', borderTop: `1px solid ${C.bord}`, flexShrink: 0 }}>
-        <Btn onClick={onStart} disabled={!valid} big full>BEGIN SESSION \u2192</Btn>
+        <Btn onClick={onStart} disabled={!valid} big full
+          style={{ background: C.accent, color: 'white', borderColor: C.accent,
+            fontSize: '1.15rem', padding: '16px' }}>
+          BEGIN SESSION →
+        </Btn>
       </div>
     </div>
   );
@@ -856,7 +973,7 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
       <div style={{ fontFamily: "'Bebas Neue', sans-serif",
         fontSize: compact ? 22 : 'clamp(2rem,9vw,3.2rem)',
         color: atGoal ? C.accent : C.cream, lineHeight: 1 }}>
-        {compact ? `\u2669=${step.tempo}` : `\u2669 = ${step.tempo}`}
+        {compact ? `♩=${step.tempo}` : `♩ = ${step.tempo}`}
         {!compact && pastGoal && <span style={{ fontSize: '0.4em', color: C.cream,
           marginLeft: 12, verticalAlign: 'middle' }}>PAST GOAL</span>}
       </div>
@@ -873,14 +990,14 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
       <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: C.ink }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '4px 14px', flexShrink: 0, borderBottom: `2px solid ${C.accent}` }}>
-          <BackBtn onClick={onBack} label="\u2190 SETUP" />
+          <BackBtn onClick={onBack} label="← SETUP" />
           <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 14,
             letterSpacing: '0.12em', color: C.cream }}>
-            PHASE {step.phase} \u00b7 STEP {safeIdx + 1}/{steps.length}
+            PHASE {step.phase} · STEP {safeIdx + 1}/{steps.length}
           </div>
           <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 14,
             color: atGoal ? C.accent : C.cream }}>
-            {atGoal ? '\u2605 GOAL' : `GOAL ${goalTempo}`}
+            {atGoal ? '★ GOAL' : `GOAL ${goalTempo}`}
           </div>
         </div>
         {progressBar}
@@ -890,20 +1007,20 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
           borderTop: `1px solid ${C.bord}`, background: C.ink }}>
           {tempoBlock(true)}
           <Btn onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}
-            style={{ flex: 1 }}>\u2190</Btn>
+            style={{ flex: 1 }}>←</Btn>
           <Btn onClick={() => setMetroOn(m => !m)} active={metroOn} style={{ flex: 1 }}>
-            {metroOn ? '\u23f8' : '\u25b6'}
+            {metroOn ? '⏸' : '▶'}
           </Btn>
           <Btn onClick={() => setIdx(nextPhaseIdx)} disabled={!hasNextPhase}
             style={{ flex: 2, borderColor: hasNextPhase ? C.accent : C.bord,
               background: hasNextPhase ? C.accent : 'transparent',
               color: hasNextPhase ? 'white' : C.dim }}>
-            NEXT PHASE \u00bb
+            NEXT PHASE »
           </Btn>
           <Btn onClick={() => setIdx(i => Math.min(steps.length - 1, i + 1))}
             disabled={idx >= steps.length - 1}
             style={{ flex: 3, background: C.accent, color: 'white', borderColor: C.accent }}>
-            NEXT STEP \u2192
+            NEXT STEP →
           </Btn>
         </div>
       </div>
@@ -913,39 +1030,47 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh',
       background: C.ink, maxWidth: 768, margin: '0 auto' }}>
-      <TopBar
-        left={<BackBtn onClick={onBack} label="\u2190 SETUP" />}
-        center={`PHASE ${step.phase} \u00b7 STEP ${safeIdx + 1}/${steps.length}`}
-        right={<span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 14,
-          color: atGoal ? C.accent : C.cream }}>
-          {atGoal ? '\u2605 GOAL' : `GOAL ${goalTempo}`}
-        </span>}
-      />
+
+      {/* Slim top bar with all info + metro */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+        padding: '5px 10px', flexShrink: 0,
+        borderBottom: `2px solid ${C.accent}`, background: C.ink }}>
+        <BackBtn onClick={onBack} label="←" />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center',
+          gap: 10, minWidth: 0 }}>
+          {tempoBlock(true)}
+          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 13,
+            color: C.cream, letterSpacing: '0.08em', minWidth: 0 }}>
+            <div>PH {step.phase} · {safeIdx + 1}/{steps.length}</div>
+            <div style={{ color: atGoal ? C.accent : C.cream, fontSize: 12 }}>
+              {atGoal ? '★ GOAL' : `GOAL ${goalTempo}`}
+            </div>
+          </div>
+        </div>
+        <Btn onClick={() => setMetroOn(m => !m)} active={metroOn}
+          style={{ padding: '6px 14px', fontSize: '1rem' }}>
+          {metroOn ? '⏸' : '▶'}
+        </Btn>
+      </div>
+
       {progressBar}
       {photoBlock}
-      <div style={{ padding: '10px 14px', flexShrink: 0, textAlign: 'center' }}>
-        {tempoBlock(false)}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
-        padding: '0 14px', flexShrink: 0 }}>
-        <Btn onClick={() => setMetroOn(m => !m)} active={metroOn} full>
-          {metroOn ? '\u23f8 METRO OFF' : '\u25b6 METRO ON'}
-        </Btn>
-        <Btn onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0} full>
-          \u2190 BACK
-        </Btn>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8,
-        padding: '8px 14px 14px', flexShrink: 0 }}>
-        <Btn onClick={() => setIdx(nextPhaseIdx)} disabled={!hasNextPhase} full
-          style={{ borderColor: hasNextPhase ? C.accent : C.bord,
+
+      {/* Compact bottom controls */}
+      <div style={{ display: 'flex', gap: 6, padding: '8px 10px',
+        flexShrink: 0, borderTop: `1px solid ${C.bord}` }}>
+        <Btn onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}
+          style={{ flex: 1 }}>←</Btn>
+        <Btn onClick={() => setIdx(nextPhaseIdx)} disabled={!hasNextPhase}
+          style={{ flex: 2, borderColor: hasNextPhase ? C.accent : C.bord,
             background: hasNextPhase ? C.accent : 'transparent',
             color: hasNextPhase ? 'white' : C.dim }}>
-          NEXT PHASE \u00bb
+          +PHASE
         </Btn>
         <Btn onClick={() => setIdx(i => Math.min(steps.length - 1, i + 1))}
-          disabled={idx >= steps.length - 1} big full>
-          NEXT STEP \u2192
+          disabled={idx >= steps.length - 1}
+          style={{ flex: 3, background: C.accent, color: 'white', borderColor: C.accent }}>
+          NEXT STEP →
         </Btn>
       </div>
     </div>
