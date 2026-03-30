@@ -680,6 +680,9 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
     return () => ro.disconnect();
   }, [loaded, draw]);
 
+  // Redraw on orientation change
+  useEffect(() => { draw(); }, [land, draw]);
+
   const handleTap = e => {
     const img = imgRef.current;
     if (!img) return;
@@ -718,7 +721,18 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
       <TopBar
         left={<BackBtn onClick={onBack} />}
         center="MARK UNITS"
-        right={<Btn onClick={onNext} disabled={totalMarkers < 2}>NEXT →</Btn>}
+        right={
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Btn onClick={() => setMarkers([])}
+              disabled={totalMarkers === 0}
+              style={{ fontSize: '0.75rem', padding: '5px 10px',
+                color: totalMarkers > 0 ? '#e05555' : C.dim,
+                borderColor: totalMarkers > 0 ? '#e05555' : C.bord }}>
+              CLEAR
+            </Btn>
+            <Btn onClick={onNext} disabled={totalMarkers < 2}>NEXT →</Btn>
+          </div>
+        }
       />
 
       {/* Instruction + page nav */}
@@ -911,6 +925,9 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
     return () => ro.disconnect();
   }, [imgLoaded, drawOverlay]);
 
+  // Redraw on orientation change
+  useEffect(() => { drawOverlay(); }, [land, drawOverlay]);
+
   const totalPages = pageImages.length;
 
   const photoBlock = (
@@ -1010,45 +1027,62 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh',
       background: C.ink, maxWidth: 768, margin: '0 auto' }}>
 
-      {/* Top bar: exit + tempo (large) + metro toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10,
-        padding: '6px 12px', flexShrink: 0,
-        borderBottom: `2px solid ${C.accent}`, background: C.ink }}>
+      {/* Top bar */}
+      <div style={{ flexShrink: 0, borderBottom: `2px solid ${C.accent}`,
+        background: C.ink }}>
 
-        {/* Exit back to params */}
-        <button onClick={onBack} style={{
-          background: 'none', border: `1px solid ${C.bord2}`,
-          color: C.cream, padding: '6px 10px', cursor: 'pointer',
-          fontFamily: "'Bebas Neue', sans-serif", fontSize: '0.85rem',
-          letterSpacing: '0.08em', flexShrink: 0,
-        }}>EXIT</button>
+        {/* Row 1: exit + tempo + metro */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10,
+          padding: '6px 12px' }}>
 
-        {/* Tempo — large and central */}
-        <div style={{ flex: 1, textAlign: 'center' }}>
-          <div style={{ fontFamily: "'Bebas Neue', sans-serif",
-            fontSize: 'clamp(1.8rem, 7vw, 2.6rem)',
-            color: atGoal ? C.accent : C.cream, lineHeight: 1 }}>
-            ♩ = {step.tempo}
-            {pastGoal && <span style={{ fontSize: '0.4em', color: C.muted,
-              marginLeft: 10, verticalAlign: 'middle' }}>PAST GOAL</span>}
+          <button onClick={onBack} style={{
+            background: 'none', border: `1px solid ${C.bord2}`,
+            color: C.cream, padding: '6px 10px', cursor: 'pointer',
+            fontFamily: "'Bebas Neue', sans-serif", fontSize: '0.85rem',
+            letterSpacing: '0.08em', flexShrink: 0,
+          }}>EXIT</button>
+
+          {/* Tempo + metro side by side — looks like a metronome */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', gap: 12 }}>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif",
+              fontSize: 'clamp(1.8rem, 7vw, 2.6rem)',
+              color: atGoal ? C.accent : C.cream, lineHeight: 1 }}>
+              ♩ = {step.tempo}
+              {pastGoal && <span style={{ fontSize: '0.4em', color: C.muted,
+                marginLeft: 8, verticalAlign: 'middle' }}>PAST GOAL</span>}
+            </div>
+            <button onClick={() => setMetroOn(m => !m)} style={{
+              background: metroOn ? C.accent : '#2a231d',
+              border: `2px solid ${metroOn ? C.accent : '#666'}`,
+              color: 'white', width: 46, height: 46,
+              cursor: 'pointer', fontSize: '1.3rem',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              {metroOn ? '⏸' : '▶'}
+            </button>
           </div>
-          <div style={{ fontFamily: "'Bebas Neue', sans-serif",
-            fontSize: 13, color: C.cream, letterSpacing: '0.1em', marginTop: 1 }}>
-            {unitLabel}
-          </div>
+
+          <div style={{ minWidth: 52 }} />
         </div>
 
-        {/* Metronome — large clear toggle */}
-        <button onClick={() => setMetroOn(m => !m)} style={{
-          background: metroOn ? C.accent : '#2a231d',
-          border: `2px solid ${metroOn ? C.accent : '#666'}`,
-          color: 'white', width: 52, height: 52,
-          cursor: 'pointer', fontSize: '1.4rem',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-        }}>
-          {metroOn ? '⏸' : '♪'}
-        </button>
+        {/* Row 2: direction instruction */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: 8, padding: '4px 12px 6px',
+          fontFamily: "'Cormorant Garamond', serif", fontStyle: 'italic',
+          fontSize: 15, color: C.cream }}>
+          <span>Play from</span>
+          <span style={{ display: 'inline-block', width: 0, height: 0,
+            borderLeft: '7px solid transparent', borderRight: '7px solid transparent',
+            borderTop: '10px solid #3db06a', transform: 'rotate(180deg)',
+            marginTop: 2 }} />
+          <span style={{ color: C.muted }}>to</span>
+          <span style={{ display: 'inline-block', width: 0, height: 0,
+            borderLeft: '7px solid transparent', borderRight: '7px solid transparent',
+            borderTop: '10px solid #e05555', transform: 'rotate(180deg)',
+            marginTop: 2 }} />
+        </div>
       </div>
 
       {progressBar}
