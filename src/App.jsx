@@ -283,7 +283,7 @@ function SignInScreen({ onSignIn }) {
         <div style={{ fontFamily: "'Bebas Neue', sans-serif",
           fontSize: 'clamp(2rem, 8vw, 3rem)', letterSpacing: '0.2em',
           color: C.accent, lineHeight: 1 }}>
-          INTERLEAVED<br />CLICK-UP
+          INTERLEAVED<br />CLICK-UP METHOD
         </div>
         <div style={{ fontFamily: "'Inconsolata', monospace", fontSize: '0.7rem',
           letterSpacing: '0.14em', color: C.muted, marginTop: 10 }}>
@@ -424,7 +424,7 @@ function LibraryScreen({ profile, onSelectPiece, onSignOut }) {
         <TopBar
           left={<span style={{ fontFamily: "'Inconsolata', monospace", fontSize: '0.7rem',
             color: C.muted }}>{profile.name || profile.email}</span>}
-          center="MY PIECES"
+          center="INTERLEAVED CLICK-UP"
           right={<BackBtn onClick={onSignOut} label="SIGN OUT" />}
         />
 

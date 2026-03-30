@@ -1,4 +1,4 @@
-# Interleaved Click-Up Practice Tool
+# Interleaved Click-Up Method
 
 A guided practice app for musicians using the Interleaved Click-Up method.
 
