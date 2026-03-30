@@ -58,7 +58,7 @@ const Btn = ({ children, onClick, active, disabled, big, full, style={} }) => (
   }}>{children}</button>
 );
 
-const BackBtn = ({ onClick, label='\u2190 BACK' }) => (
+const BackBtn = ({ onClick, label='← BACK' }) => (
   <button onClick={onClick} style={{
     background:'none',border:'none',color:C.cream,padding:0,
     fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
@@ -81,7 +81,7 @@ const TopBar = ({ left, center, right }) => (
     borderBottom:`2px solid ${C.accent}`,background:C.ink,
   }}>
     <div style={{ minWidth:80 }}>{left}</div>
-    <div style={{ fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
+    <div style={{ fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.3rem',
       letterSpacing:'0.15em',color:C.cream,textAlign:'center' }}>{center}</div>
     <div style={{ minWidth:80,display:'flex',justifyContent:'flex-end' }}>{right}</div>
   </div>
@@ -581,7 +581,7 @@ function SignInScreen({ onSignIn }) {
         p={email:rows[0].email,name:rows[0].name||'',instrument:rows[0].instrument||''};
         setMsg('Welcome back, '+(p.name||p.email)+'!');
       } else {
-        if(!name.trim()||!inst){setMsg('New account \u2014 please enter your name and instrument.');setLoad(false);return;}
+        if(!name.trim()||!inst){setMsg('New account — please enter your name and instrument.');setLoad(false);return;}
         await fetch(SB_URL+'/rest/v1/profiles',{method:'POST',headers:{...SB_H,Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({email:email.trim(),name:name.trim(),instrument:inst})});
         p={email:email.trim(),name:name.trim(),instrument:inst};
         setMsg('Account created!');
@@ -613,7 +613,7 @@ function SignInScreen({ onSignIn }) {
           </div>
         </Field>
         {msg && <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.85rem',color:msg.includes('error')||msg.includes('Please')||msg.includes('New')?'#e57373':C.gold}}>{msg}</div>}
-        <Btn onClick={submit} disabled={loading} big full>{loading?'CHECKING...':'SIGN IN \u2192'}</Btn>
+        <Btn onClick={submit} disabled={loading} big full>{loading?'CHECKING...':'SIGN IN →'}</Btn>
       </div>
     </div>
   );
@@ -755,8 +755,8 @@ function LibraryScreen({ profile, onSelectPiece, onLoadExercise, onSignOut }) {
                 style={{padding:'16px 14px',borderBottom:`1px solid ${C.bord}`,cursor:'pointer'}}
                 onMouseEnter={e=>e.currentTarget.style.background=C.panel}
                 onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',letterSpacing:'0.08em',color:C.cream}}>{p.title||'Untitled'}</div>
-                <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.7rem',color:C.muted,marginTop:3}}>{[p.composer,p.instrument,p.file_type?.toUpperCase()].filter(Boolean).join(' \u00b7 ')}</div>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.15rem',letterSpacing:'0.08em',color:C.cream}}>{p.title||'Untitled'}</div>
+                <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.muted,marginTop:4}}>{[p.composer,p.instrument,p.file_type?.toUpperCase()].filter(Boolean).join(' · ')}</div>
               </div>
             ))}
           </>
@@ -774,8 +774,8 @@ function LibraryScreen({ profile, onSelectPiece, onLoadExercise, onSignOut }) {
                 onMouseEnter={e=>e.currentTarget.style.background=C.panel}
                 onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                 <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',letterSpacing:'0.08em',color:C.cream}}>{ex.doc_name||'Untitled'}</div>
-                <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.7rem',color:C.muted,marginTop:3}}>
-                  {[ex.composer,ex.instrument,ex.grouping,ex.key].filter(Boolean).join(' \u00b7 ')}
+                <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.muted,marginTop:4}}>
+                  {[ex.composer,ex.instrument,ex.grouping,ex.key].filter(Boolean).join(' · ')}
                 </div>
               </div>
             ))}
@@ -1021,6 +1021,19 @@ function MURScreen({ piece, pageImages, profile, savedExercise, onBack }) {
     setExercises(pats.map(p=>({pat:p,abc:null})));
     setExIdx(0);
     setGenerated(true);
+    // Log practice session
+    try {
+      const prof = JSON.parse(localStorage.getItem('murProfile')||'{}');
+      if(prof.email) {
+        sbPost('/rest/v1/practice_log', {
+          user_email: prof.email,
+          piece_id: piece?.id||null,
+          strategy: 'RV',
+          grouping: sec,
+          n_notes: selNotes.length,
+        }).catch(()=>{});
+      }
+    } catch(e){}
   };
 
   // ── Save ───────────────────────────────────────────────────────────
@@ -1400,7 +1413,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, onBack }) {
           marginLeft:'auto',background:'none',border:'none',
           color:C.muted,fontFamily:"'Bebas Neue',sans-serif",
           fontSize:'0.65rem',letterSpacing:'0.1em',padding:'7px 14px',cursor:'pointer',
-        }}>{accMode==='sharp'?'\u266F Sharps \u21c4 \u266D Flats':'\u266F Sharps \u21c4 \u266D Flats'}</button>
+        }}>{accMode==='sharp'?'\u266F Sharps ⇄ \u266D Flats':'\u266F Sharps ⇄ \u266D Flats'}</button>
       </div>
 
       {/* Keyboard */}
@@ -1425,7 +1438,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, onBack }) {
             <div style={{width:28,height:28,background:micActive?'#e53535':C.accent,borderRadius:micActive?4:'50%',transition:'all 0.2s'}} />
           </button>
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',letterSpacing:'0.15em',color:C.muted,marginTop:8}}>
-            {micActive?'RECORDING \u2014 TAP TO STOP':'TAP TO RECORD'}
+            {micActive?'RECORDING — TAP TO STOP':'TAP TO RECORD'}
           </div>
           {micStatus && <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.5rem',color:C.accent,marginTop:4}}>{micStatus}</div>}
           <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',fontSize:'0.9rem',color:C.muted,marginTop:8,maxWidth:300,margin:'8px auto 0'}}>
@@ -1661,9 +1674,9 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
 
   const pageNav = totalPages>1 && (
     <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-      <Btn onClick={()=>setCurrentPage(p=>Math.max(0,p-1))} disabled={currentPage===0} style={{padding:'6px 14px'}}>\u2190</Btn>
+      <Btn onClick={()=>setCurrentPage(p=>Math.max(0,p-1))} disabled={currentPage===0} style={{padding:'6px 14px'}}>←</Btn>
       <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream,minWidth:60,textAlign:'center'}}>p.{currentPage+1}/{totalPages}</span>
-      <Btn onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))} disabled={currentPage===totalPages-1} style={{padding:'6px 14px'}}>\u2192</Btn>
+      <Btn onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))} disabled={currentPage===totalPages-1} style={{padding:'6px 14px'}}>→</Btn>
     </div>
   );
 
@@ -1678,7 +1691,7 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
               style={{fontSize:'0.75rem',padding:'5px 10px',color:totalMarkers>0?'#e05555':C.dim,borderColor:totalMarkers>0?'#e05555':C.bord}}>
               CLEAR
             </Btn>
-            <Btn onClick={onNext} disabled={totalMarkers<2}>NEXT \u2192</Btn>
+            <Btn onClick={onNext} disabled={totalMarkers<2}>NEXT →</Btn>
           </div>
         }
       />
@@ -1704,6 +1717,17 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
             style={{width:'100%',display:'block',cursor:'crosshair',userSelect:'none'}}
             draggable={false} />
           <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,pointerEvents:'none'}} />
+          {/* ForScore-style tap zones for page navigation */}
+          {totalPages>1 && currentPage>0 && (
+            <div onClick={()=>setCurrentPage(p=>Math.max(0,p-1))}
+              style={{position:'absolute',top:0,left:0,width:'15%',height:'100%',
+                cursor:'pointer',zIndex:10}} />
+          )}
+          {totalPages>1 && currentPage<totalPages-1 && (
+            <div onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))}
+              style={{position:'absolute',top:0,right:0,width:'15%',height:'100%',
+                cursor:'pointer',zIndex:10}} />
+          )}
         </div>
         {showTwoPages&&rightPage!==null&&(
           <div style={{position:'relative',flex:1,minWidth:0,borderLeft:`1px solid ${C.bord}`,overflowY:'auto'}}>
@@ -1744,8 +1768,8 @@ function ParamsScreen({ N, startTempo, setStartTempo, goalTempo, setGoalTempo, i
       </div>
       <div style={{padding:'12px 20px',borderTop:`1px solid ${C.bord}`,flexShrink:0}}>
         <Btn onClick={onStart} disabled={!valid} big full
-          style={{background:valid?C.accent:'transparent',color:valid?'white':C.dim,borderColor:valid?C.accent:C.bord,fontSize:'1.15rem',padding:16}}>
-          BEGIN SESSION \u2192
+          style={{background:valid?C.accent:'transparent',color:valid?'white':C.dim,borderColor:valid?C.accent:C.bord,fontSize:'1.3rem',padding:'18px 24px',letterSpacing:'0.15em'}}>
+          BEGIN SESSION →
         </Btn>
       </div>
     </div>
@@ -1785,12 +1809,29 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
 
   const safeIdx  = Math.min(idx,steps.length-1);
   const step     = steps[safeIdx];
+
+  // Log practice session on mount
+  useEffect(()=>{
+    try {
+      const prof = JSON.parse(localStorage.getItem('murProfile')||'{}');
+      if(prof.email) {
+        sbPost('/rest/v1/practice_log', {
+          user_email: prof.email,
+          piece_id: null,
+          strategy: 'ICU',
+          n_units: N,
+          start_tempo: startTempo,
+          goal_tempo: goalTempo,
+        }).catch(()=>{});
+      }
+    } catch(e){}
+  },[]);
   const atGoal   = step.tempo>=goalTempo;
   const pastGoal = step.tempo>goalTempo;
   const nextPhaseIdx = steps.findIndex((s,i)=>i>safeIdx&&s.phase===step.phase+1);
   const hasNextPhase = nextPhaseIdx>=0;
   const progress = (safeIdx+1)/steps.length;
-  const unitLabel = step.units.length===1?`UNIT ${step.units[0]+1}`:`UNITS ${step.units[0]+1}\u2013${step.units[step.units.length-1]+1}`;
+  const unitLabel = step.units.length===1?`UNIT ${step.units[0]+1}`:`UNITS ${step.units[0]+1}–${step.units[step.units.length-1]+1}`;
   const showTwo = land&&pageImages.length>1;
   const rightPageS = currentPage+1<pageImages.length?currentPage+1:null;
 
@@ -1855,6 +1896,16 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
           style={{width:'100%',height:'100%',objectFit:'contain',display:'block',userSelect:'none'}}
           draggable={false} />
         <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,pointerEvents:'none'}} />
+        {pageImages.length>1 && currentPage>0 && (
+          <div onClick={()=>setCurrentPage(p=>Math.max(0,p-1))}
+            style={{position:'absolute',top:0,left:0,width:'15%',height:'100%',
+              cursor:'pointer',zIndex:10}} />
+        )}
+        {pageImages.length>1 && currentPage<pageImages.length-1 && (
+          <div onClick={()=>setCurrentPage(p=>Math.min(pageImages.length-1,p+1))}
+            style={{position:'absolute',top:0,right:0,width:'15%',height:'100%',
+              cursor:'pointer',zIndex:10}} />
+        )}
       </div>
       {showTwo&&rightPageS!==null&&(
         <div style={{position:'relative',flex:1,minWidth:0,borderLeft:`1px solid ${C.bord}`,overflow:'hidden'}}>
@@ -1874,20 +1925,20 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
         <button onClick={onBack} style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,padding:'4px 10px',cursor:'pointer',fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',letterSpacing:'0.08em',flexShrink:0}}>EXIT</button>
         <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:12}}>
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?'clamp(1.4rem,4vw,2rem)':'clamp(1.8rem,7vw,2.6rem)',color:atGoal?C.accent:C.cream,lineHeight:1}}>
-            \u2669 = {step.tempo}
+            ♩ = {step.tempo}
             {pastGoal&&<span style={{fontSize:'0.4em',color:C.muted,marginLeft:8,verticalAlign:'middle'}}>PAST GOAL</span>}
           </div>
           <button onClick={()=>setMetroOn(m=>!m)} style={{background:metroOn?C.accent:'#2a231d',border:`2px solid ${metroOn?C.accent:'#666'}`,color:'white',width:compact?38:46,height:compact?38:46,cursor:'pointer',fontSize:compact?'1.1rem':'1.3rem',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-            {metroOn?'\u23f8':'\u25b6'}
+            {metroOn?'⏸':'▶'}
           </button>
         </div>
         <div style={{minWidth:52}} />
       </div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:compact?'2px 12px 3px':'4px 12px 6px',fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',fontSize:compact?12:15,color:C.cream}}>
         <span>Play from</span>
-        <span style={{display:'inline-block',width:0,height:0,borderLeft:`${compact?5:6}px solid transparent`,borderRight:`${compact?5:6}px solid transparent`,borderTop:`${compact?7:8}px solid #3db06a`,transform:'rotate(180deg)',marginTop:1}} />
+        <span style={{display:'inline-block',width:0,height:0,borderLeft:`${compact?5:6}px solid transparent`,borderRight:`${compact?5:6}px solid transparent`,borderBottom:`${compact?7:8}px solid #3db06a`,transform:'rotate(180deg)',marginTop:1}} />
         <span style={{color:C.muted}}>to</span>
-        <span style={{display:'inline-block',width:0,height:0,borderLeft:`${compact?5:6}px solid transparent`,borderRight:`${compact?5:6}px solid transparent`,borderTop:`${compact?7:8}px solid #e05555`,transform:'rotate(180deg)',marginTop:1}} />
+        <span style={{display:'inline-block',width:0,height:0,borderLeft:`${compact?5:6}px solid transparent`,borderRight:`${compact?5:6}px solid transparent`,borderBottom:`${compact?7:8}px solid #e05555`,transform:'rotate(180deg)',marginTop:1}} />
         <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?11:13,color:C.muted,letterSpacing:'0.06em',marginLeft:4}}>{unitLabel}</span>
       </div>
     </div>
@@ -1897,11 +1948,11 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
     <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:0,flexShrink:0,borderTop:`2px solid ${C.bord}`}}>
       <Btn onClick={()=>setIdx(nextPhaseIdx)} disabled={!hasNextPhase} full
         style={{padding:'14px 8px',fontSize:'1rem',borderRadius:0,border:'none',borderRight:`1px solid ${C.bord}`,background:hasNextPhase?C.panel:'transparent',color:hasNextPhase?C.cream:C.dim}}>
-        NEXT PHASE \u00bb
+        NEXT PHASE »
       </Btn>
       <Btn onClick={()=>setIdx(i=>Math.min(steps.length-1,i+1))} disabled={idx>=steps.length-1} full
         style={{padding:'14px 8px',fontSize:'1.1rem',borderRadius:0,border:'none',background:idx>=steps.length-1?'transparent':C.accent,color:'white'}}>
-        NEXT STEP \u2192
+        NEXT STEP →
       </Btn>
     </div>
   );
