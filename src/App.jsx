@@ -645,9 +645,22 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current, img = imgRef.current;
-    if (!canvas || !img) return;
+    if (!canvas || !img || !img.complete) return;
     const w = img.clientWidth, h = img.clientHeight;
-    if (!w || !h) return;
+    if (!w || !h) {
+      // dimensions not ready yet — wait a frame
+      requestAnimationFrame(() => {
+        const w2 = img.clientWidth, h2 = img.clientHeight;
+        if (!w2 || !h2) return;
+        canvas.width = w2; canvas.height = h2;
+        canvas.style.width = w2 + 'px'; canvas.style.height = h2 + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, w2, h2);
+        markers.filter(m => m.page === currentPage)
+          .forEach(m => drawArrow(ctx, m.x * w2, m.y * h2, C.accent));
+      });
+      return;
+    }
     canvas.width = w; canvas.height = h;
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
     const ctx = canvas.getContext('2d');
@@ -657,17 +670,12 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
       .forEach(m => drawArrow(ctx, m.x * w, m.y * h, C.accent));
   }, [markers, currentPage]);
 
-  useEffect(() => {
-    if (loaded) {
-      draw();
-      // Re-draw after layout settles (fixes first-page blank canvas)
-      const t = setTimeout(() => draw(), 80);
-      return () => clearTimeout(t);
-    }
-  }, [loaded, draw]);
+  useEffect(() => { draw(); }, [draw]);
+
   useEffect(() => { setLoaded(false); }, [currentPage]);
+
   useEffect(() => {
-    const ro = new ResizeObserver(() => { if (loaded) draw(); });
+    const ro = new ResizeObserver(() => draw());
     if (imgRef.current) ro.observe(imgRef.current);
     return () => ro.disconnect();
   }, [loaded, draw]);
@@ -732,7 +740,7 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
       <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0,
         background: '#0a0805', overflowY: 'auto' }}>
         <img ref={imgRef} src={pageImages[currentPage]}
-          onLoad={() => setLoaded(true)}
+          onLoad={() => { setLoaded(true); requestAnimationFrame(() => draw()); }}
           onClick={handleTap}
           style={{ width: '100%', display: 'block', cursor: 'crosshair', userSelect: 'none' }}
           draggable={false} />
@@ -895,15 +903,10 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
       });
   }, [step.units, markers, currentPage]);
 
+  useEffect(() => { drawOverlay(); }, [drawOverlay]);
+
   useEffect(() => {
-    if (imgLoaded) {
-      drawOverlay();
-      const t = setTimeout(() => drawOverlay(), 80);
-      return () => clearTimeout(t);
-    }
-  }, [imgLoaded, drawOverlay]);
-  useEffect(() => {
-    const ro = new ResizeObserver(() => { if (imgLoaded) drawOverlay(); });
+    const ro = new ResizeObserver(() => drawOverlay());
     if (imgRef.current) ro.observe(imgRef.current);
     return () => ro.disconnect();
   }, [imgLoaded, drawOverlay]);
@@ -914,7 +917,7 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
     <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0,
       background: '#0a0805', overflowY: land ? 'hidden' : 'auto' }}>
       <img ref={imgRef} src={pageImages[currentPage]}
-        onLoad={() => setImgLoaded(true)}
+        onLoad={() => { setImgLoaded(true); requestAnimationFrame(() => drawOverlay()); }}
         style={{ width: '100%', height: land ? '100%' : 'auto',
           objectFit: land ? 'contain' : 'initial',
           display: 'block', userSelect: 'none' }}
