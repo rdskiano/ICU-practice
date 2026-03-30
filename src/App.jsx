@@ -25,7 +25,7 @@ const FONTS = `
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body,#root{height:100%;}
   body{font-family:'Cormorant Garamond',Georgia,serif;background:${C.ink};
-    padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);}
+    padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);overflow:hidden;}
   input[type=number],input[type=text],input[type=email]{
     background:${C.panel};color:${C.cream};border:1px solid ${C.bord};
     padding:9px 12px;font-family:'Inconsolata',monospace;font-size:1rem;width:100%;}
@@ -505,7 +505,7 @@ export default function App() {
   useEffect(()=>{ if(getProfile()?.email) setScreen('library'); },[]);
 
   return (
-    <div style={{minHeight:'100vh',background:C.ink,color:C.cream}}>
+    <div style={{height:'100dvh',background:C.ink,color:C.cream,display:'flex',flexDirection:'column',overflow:'hidden'}}>
       <style>{FONTS}</style>
       {screen==='signin'   && <SignInScreen onSignIn={p=>{saveProf(p);setScreen('library');}} />}
       {screen==='library'  && (
@@ -591,7 +591,7 @@ function SignInScreen({ onSignIn }) {
   };
 
   return (
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',padding:'32px 24px',gap:36}}>
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flex:'1 1 0',minHeight:0,padding:'32px 24px',gap:36,overflowY:'auto'}}>
       <div style={{textAlign:'center'}}>
         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'clamp(2rem,8vw,3rem)',letterSpacing:'0.2em',color:C.accent,lineHeight:1}}>
           PLAY FAST<br/>NOTES
@@ -701,7 +701,7 @@ function LibraryScreen({ profile, onSelectPiece, onLoadExercise, onSignOut }) {
   });
 
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'100dvh'}}>
+    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
       <TopBar
         left={<span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',color:C.cream}}>{profile.name||profile.email}</span>}
         center="PLAY FAST NOTES"
@@ -798,7 +798,7 @@ function StrategyScreen({ piece, onICU, onMUR, onBack }) {
   });
 
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'100dvh'}}>
+    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
       <TopBar left={<BackBtn onClick={onBack} />} center={piece?.title||'CHOOSE STRATEGY'} right={null} />
 
       <div style={{flex:'1 1 0',display:'flex',flexDirection:'column',justifyContent:'center',gap:16,padding:'24px 20px',maxWidth:480,margin:'0 auto',width:'100%'}}>
@@ -1516,7 +1516,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, onBack }) {
 
   // ── Layout ─────────────────────────────────────────────────────────
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'100dvh'}}>
+    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
       <TopBar
         left={<BackBtn onClick={onBack} />}
         center={piece?.title||(savedExercise?.doc_name?savedExercise.doc_name:'RHYTHMIC VARIATION')}
@@ -1657,16 +1657,43 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
   },[loaded,draw]);
   useEffect(()=>{draw();},[land,draw]);
 
-  const makeTapHandler = (pageIdx,getImg) => e => {
-    const imgEl=typeof getImg==='function'?getImg():getImg;
-    if(!imgEl) return;
-    const rect=imgEl.getBoundingClientRect();
-    const x=(e.clientX-rect.left)/rect.width;
-    const y=(e.clientY-rect.top)/rect.height;
-    const hitX=36/imgEl.clientWidth,hitY=36/imgEl.clientHeight;
-    const near=markers.findIndex(m=>m.page===pageIdx&&Math.abs(m.x-x)<hitX&&Math.abs(m.y-y)<hitY);
-    if(near>=0){setMarkers(prev=>prev.filter((_,i)=>i!==near));}
-    else{setMarkers(prev=>[...prev,{page:pageIdx,x,y}]);}
+  const makeTouchHandlers = (pageIdx, getImg) => {
+    let pressTimer=null, pressX=0, pressY=0, didLong=false;
+    const placeOrRemove = (cx, cy) => {
+      const imgEl = typeof getImg==='function'?getImg():getImg;
+      if(!imgEl) return;
+      const rect=imgEl.getBoundingClientRect();
+      const x=(cx-rect.left)/rect.width, y=(cy-rect.top)/rect.height;
+      const hitX=44/imgEl.clientWidth, hitY=44/imgEl.clientHeight;
+      const near=markers.findIndex(m=>m.page===pageIdx&&Math.abs(m.x-x)<hitX&&Math.abs(m.y-y)<hitY);
+      if(near>=0) setMarkers(prev=>prev.filter((_,i)=>i!==near));
+      else setMarkers(prev=>[...prev,{page:pageIdx,x,y}]);
+      if(navigator.vibrate) navigator.vibrate(30);
+    };
+    return {
+      onTouchStart: e=>{
+        didLong=false;
+        const t=e.touches[0]; pressX=t.clientX; pressY=t.clientY;
+        pressTimer=setTimeout(()=>{ didLong=true; placeOrRemove(pressX,pressY); },500);
+      },
+      onTouchMove: e=>{
+        const t=e.touches[0];
+        if(Math.abs(t.clientX-pressX)>10||Math.abs(t.clientY-pressY)>10){
+          clearTimeout(pressTimer); pressTimer=null;
+        }
+      },
+      onTouchEnd: e=>{
+        clearTimeout(pressTimer); pressTimer=null;
+        if(!didLong && totalPages>1){
+          const imgEl=typeof getImg==='function'?getImg():getImg;
+          if(!imgEl) return;
+          const rect=imgEl.getBoundingClientRect();
+          const x=(pressX-rect.left)/rect.width;
+          if(x<0.2&&currentPage>0) setCurrentPage(p=>p-1);
+          else if(x>0.8&&currentPage<totalPages-1) setCurrentPage(p=>p+1);
+        }
+      },
+    };
   };
 
   const totalMarkers=markers.length;
@@ -1681,7 +1708,7 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
   );
 
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'100dvh'}}>
+    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
       <TopBar
         left={<BackBtn onClick={onBack} />}
         center={piece?.title||'MARK UNITS'}
@@ -1691,7 +1718,7 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
               style={{fontSize:'0.75rem',padding:'5px 10px',color:totalMarkers>0?'#e05555':C.dim,borderColor:totalMarkers>0?'#e05555':C.bord}}>
               CLEAR
             </Btn>
-            <Btn onClick={onNext} disabled={totalMarkers<2}>NEXT →</Btn>
+            <Btn onClick={onNext} disabled={totalMarkers<2}>SESSION SETUP →</Btn>
           </div>
         }
       />
@@ -1699,7 +1726,7 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
         padding:'8px 16px',flexShrink:0,borderBottom:`1px solid ${C.bord}`,gap:12,flexWrap:'wrap'}}>
         <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:16,color:C.cream}}>
-          Tap <em>above</em> the first note of each unit in order &mdash; at least 2 markers needed
+          Hold above the first note of each unit to place a marker
         </div>
         <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:15,letterSpacing:'0.08em',color:C.accent}}>
@@ -1713,27 +1740,16 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
         <div style={{position:'relative',flex:1,minWidth:0,overflowY:'auto'}}>
           <img ref={imgRef} src={pageImages[currentPage]}
             onLoad={()=>{setLoaded(true);requestAnimationFrame(()=>draw());}}
-            onClick={makeTapHandler(currentPage,()=>imgRef.current)}
+            {...makeTouchHandlers(currentPage,()=>imgRef.current)}
             style={{width:'100%',display:'block',cursor:'crosshair',userSelect:'none'}}
             draggable={false} />
           <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,pointerEvents:'none'}} />
-          {/* ForScore-style tap zones for page navigation */}
-          {totalPages>1 && currentPage>0 && (
-            <div onClick={()=>setCurrentPage(p=>Math.max(0,p-1))}
-              style={{position:'absolute',top:0,left:0,width:'15%',height:'100%',
-                cursor:'pointer',zIndex:10}} />
-          )}
-          {totalPages>1 && currentPage<totalPages-1 && (
-            <div onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))}
-              style={{position:'absolute',top:0,right:0,width:'15%',height:'100%',
-                cursor:'pointer',zIndex:10}} />
-          )}
         </div>
         {showTwoPages&&rightPage!==null&&(
           <div style={{position:'relative',flex:1,minWidth:0,borderLeft:`1px solid ${C.bord}`,overflowY:'auto'}}>
             <img ref={imgRef2} src={pageImages[rightPage]}
               onLoad={()=>{setLoaded2(true);requestAnimationFrame(()=>draw());}}
-              onClick={makeTapHandler(rightPage,()=>imgRef2.current)}
+              {...makeTouchHandlers(rightPage,()=>imgRef2.current)}
               style={{width:'100%',display:'block',cursor:'crosshair',userSelect:'none'}}
               draggable={false} />
             <canvas ref={canvasRef2} style={{position:'absolute',top:0,left:0,pointerEvents:'none'}} />
@@ -1750,7 +1766,7 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
 function ParamsScreen({ N, startTempo, setStartTempo, goalTempo, setGoalTempo, increment, setIncrement, onBack, onStart }) {
   const valid = goalTempo>startTempo&&increment>0&&increment<=goalTempo-startTempo;
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'100dvh'}}>
+    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
       <TopBar left={<BackBtn onClick={onBack} />} center="SESSION SETUP" right={null} />
       <div style={{flex:'1 1 0',overflowY:'auto',padding:'24px 20px',display:'flex',flexDirection:'column',gap:24,maxWidth:480,margin:'0 auto',width:'100%'}}>
         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',color:C.cream,letterSpacing:'0.1em'}}>
@@ -1896,16 +1912,6 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
           style={{width:'100%',height:'100%',objectFit:'contain',display:'block',userSelect:'none'}}
           draggable={false} />
         <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,pointerEvents:'none'}} />
-        {pageImages.length>1 && currentPage>0 && (
-          <div onClick={()=>setCurrentPage(p=>Math.max(0,p-1))}
-            style={{position:'absolute',top:0,left:0,width:'15%',height:'100%',
-              cursor:'pointer',zIndex:10}} />
-        )}
-        {pageImages.length>1 && currentPage<pageImages.length-1 && (
-          <div onClick={()=>setCurrentPage(p=>Math.min(pageImages.length-1,p+1))}
-            style={{position:'absolute',top:0,right:0,width:'15%',height:'100%',
-              cursor:'pointer',zIndex:10}} />
-        )}
       </div>
       {showTwo&&rightPageS!==null&&(
         <div style={{position:'relative',flex:1,minWidth:0,borderLeft:`1px solid ${C.bord}`,overflow:'hidden'}}>
