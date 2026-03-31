@@ -93,6 +93,8 @@ const TopBar = ({ left, center, right }) => (
 ═══════════════════════════════════════════════════════════════════════ */
 const range = (a,b) => Array.from({length:b-a},(_,i)=>a+i);
 
+function dn(n){return n.replace('##','\uD834\uDD2A').replace('bb','\uD834\uDD2B').replace('#','\u266F').replace(/([A-G])b/g,'$1\u266D');}
+
 function getProfile() { try { return JSON.parse(localStorage.getItem('murProfile')||'{}'); } catch { return {}; } }
 function setProfile(p) { localStorage.setItem('murProfile', JSON.stringify(p)); }
 
@@ -1043,6 +1045,82 @@ function StrategyScreen({ piece, onICU, onMUR, onBack }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   CHIP POPUP — note respell / accidental / delete
+═══════════════════════════════════════════════════════════════════════ */
+function ChipPopup({ note, anchorY, onClose, onDelete, onUpdate, onRespell }) {
+  const m = note?.match(/^([A-G])(##|bb|#|b|n)?(\d)$/);
+  if (!m) return null;
+  const pc = m[1], curAcc = m[2]||'', oct = parseInt(m[3]);
+
+  const ACCS = [
+    { label:'\uD834\uDD2B', acc:'bb', title:'double flat'  },
+    { label:'\u266D',        acc:'b',  title:'flat'          },
+    { label:'\u266E',        acc:'n',  title:'forced natural' },
+    { label:pc,              acc:'',   title:'no accidental'  },
+    { label:'\u266F',        acc:'#',  title:'sharp'          },
+    { label:'\uD834\uDD2A', acc:'##', title:'double sharp'   },
+  ];
+
+  const popupH = 145;
+  const top = anchorY > popupH + 80 ? anchorY - popupH - 10 : anchorY + 34;
+
+  return (
+    <>
+      <div onClick={e=>{e.stopPropagation();onClose();}}
+        style={{position:'fixed',inset:0,zIndex:199}} />
+      <div onClick={e=>e.stopPropagation()}
+        style={{
+          position:'fixed',left:'50%',top,transform:'translateX(-50%)',
+          zIndex:200,background:C.panel,border:`2px solid ${C.accent}`,
+          padding:'12px 14px',minWidth:238,maxWidth:320,
+          display:'flex',flexDirection:'column',gap:10,
+          boxShadow:'0 8px 32px rgba(0,0,0,0.75)',
+        }}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.9rem',
+          letterSpacing:'0.12em',color:C.cream,textAlign:'center',lineHeight:1}}>
+          {dn(note)}
+        </div>
+        <div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.62rem',
+            letterSpacing:'0.18em',color:C.rule,marginBottom:5}}>FORCE ACCIDENTAL</div>
+          <div style={{display:'flex',gap:3}}>
+            {ACCS.map(opt=>(
+              <button key={opt.acc} onClick={()=>onUpdate(pc+opt.acc+oct)} title={opt.title}
+                style={{
+                  flex:1,padding:'7px 2px',
+                  background:curAcc===opt.acc?C.accent:'#2a231d',
+                  border:`1px solid ${curAcc===opt.acc?C.accent:C.bord}`,
+                  color:curAcc===opt.acc?'white':C.cream,
+                  fontFamily:"'Cormorant Garamond',serif",fontSize:'1.05rem',
+                  cursor:'pointer',transition:'background 0.1s',
+                }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={onRespell}
+            style={{flex:1,padding:'8px',background:'#2a231d',
+              border:`1px solid ${C.bord2}`,color:C.cream,
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.78rem',
+              letterSpacing:'0.1em',cursor:'pointer'}}>
+            &#8644; RESPELL
+          </button>
+          <button onClick={onDelete}
+            style={{flex:1,padding:'8px',background:'none',
+              border:'1px solid #cc4444',color:'#e57373',
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.78rem',
+              letterSpacing:'0.1em',cursor:'pointer'}}>
+            &#215; DELETE
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    MUR SCREEN
 ═══════════════════════════════════════════════════════════════════════ */
 /* ═══════════════════════════════════════════════════════════════════════
@@ -1501,7 +1579,6 @@ K:${abcKey}${abcClef}
   // ── Chip helpers ───────────────────────────────────────────────────
   const removeNote = i => { setSelNotes(prev=>prev.filter((_,j)=>j!==i)); };
   const flipNote   = i => { setSelNotes(prev=>{const n=[...prev];n[i]=((n2,idx)=>{const m=n2.match(/^([A-G])(##|bb|#|b)?(\d)$/);if(!m)return n2;const pc=m[1]+(m[2]||''),oct=parseInt(m[3]),next={'C':'B#','B#':'C##','C##':'Db','Db':'C#','C#':'Dbb','Dbb':'C','D':'D##','D##':'Ebb','Ebb':'D#','D#':'Eb','Eb':'D','E':'Fb','Fb':'Ebb','E#':'F','F':'E#','F#':'Gb','Gb':'F##','F##':'G','G':'Gbb','Gbb':'F#','G#':'Ab','Ab':'G##','G##':'A','A':'Abb','Abb':'G#','A#':'Bb','Bb':'A##','A##':'B','B':'Cbb','Cbb':'A#','B#':'C','Cb':'B'}[pc];if(!next)return n2;return next+((pc==='B#')?oct+1:(pc==='Cb')?oct-1:oct);})(n[i],i);return n;}); };
-  function dn(n){return n.replace('##','\uD834\uDD2A').replace('bb','\uD834\uDD2B').replace('#','\u266F').replace(/([A-G])b/g,'$1\u266D');}
 
   const canGenerate = activeGroup && selNotes.length>0;
 
@@ -1634,8 +1711,8 @@ K:${abcKey}${abcClef}
 
       {/* Step 1: grouping */}
       <div style={{padding:'10px 14px',borderBottom:`1px solid ${C.bord}`,flexShrink:0}}>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',letterSpacing:'0.2em',
-          color:C.accent,marginBottom:6}}>NOTE GROUPING</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.88rem',letterSpacing:'0.14em',
+          color:C.rule,marginBottom:5}}>NOTE GROUPING OF THE PASSAGE <span style={{color:'#e06060',fontSize:'0.65rem',verticalAlign:'middle',marginLeft:2}}>required</span></div>
         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
           {[3,4,5,6,7,8].map(n=>(
             <button key={n} onClick={()=>setActiveGroup(n)} style={{
@@ -1657,7 +1734,7 @@ K:${abcKey}${abcClef}
       <div style={{padding:'8px 14px',borderBottom:`1px solid ${C.bord}`,
         display:'flex',gap:12,flexWrap:'wrap',flexShrink:0,alignItems:'flex-end'}}>
         <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:100}}>
-          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',letterSpacing:'0.2em',color:C.accent}}>CLEF</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.8rem',letterSpacing:'0.15em',color:C.rule}}>CLEF</div>
           <div style={{position:'relative'}}>
             <select value={clef} onChange={e=>setClef(e.target.value)} style={{width:'auto',minWidth:90}}>
               <option value="treble">Treble</option><option value="bass">Bass</option>
@@ -1666,19 +1743,9 @@ K:${abcKey}${abcClef}
             <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',color:C.muted,pointerEvents:'none'}}>&#9662;</span>
           </div>
         </div>
-        <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:80}}>
-          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',letterSpacing:'0.2em',color:C.accent}}>KEY</div>
-          <div style={{position:'relative'}}>
-            <select value={key} onChange={e=>setKey(e.target.value)} style={{width:'auto',minWidth:80}}>
-              {['C','G','D','A','E','B','Fs','F','Bb','Eb','Ab','Db','Gb'].map(k=>(
-                <option key={k} value={k}>{k==='Fs'?'F#':k}</option>
-              ))}
-            </select>
-            <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',color:C.muted,pointerEvents:'none'}}>&#9662;</span>
-          </div>
-        </div>
+
         <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:140}}>
-          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',letterSpacing:'0.2em',color:C.accent}}>INSTRUMENT</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.8rem',letterSpacing:'0.15em',color:C.rule}}>INSTRUMENT</div>
           <div style={{position:'relative'}}>
             <select value={instrTranspose} onChange={e=>setInstrTranspose(parseInt(e.target.value))} style={{width:'100%'}}>
               <option value="0">Concert Pitch</option>
@@ -1716,10 +1783,22 @@ K:${abcKey}${abcClef}
 
       {/* Keyboard */}
       {inputTab==='keys' && (
-        <div style={{flexShrink:0}}>
+        <div style={{flexShrink:0,position:'relative'}}>
+          {!activeGroup && (
+            <div style={{
+              position:'absolute',inset:0,zIndex:10,
+              background:'rgba(26,22,18,0.85)',
+              display:'flex',alignItems:'center',justifyContent:'center',
+            }}>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                fontSize:'1rem',color:C.cream,textAlign:'center',padding:'0 28px',lineHeight:1.5}}>
+                Select a note grouping above<br/>before entering notes
+              </div>
+            </div>
+          )}
           <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
             <svg ref={el=>{pianoRef.current=el;if(el&&!pianoMounted)setPianoMounted(true);}} viewBox="0 0 1008 130" preserveAspectRatio="none"
-              style={{width:2000,height:160,display:'block',cursor:'pointer',touchAction:'none'}} />
+              style={{width:2000,height:160,display:'block',cursor:activeGroup?'pointer':'not-allowed',touchAction:'none',opacity:activeGroup?1:0.4}} />
           </div>
         </div>
       )}
@@ -1763,19 +1842,22 @@ K:${abcKey}${abcClef}
                 width:14,height:14,borderRadius:'50%',border:`1px solid ${insertAt===i?C.accent:C.bord}`,
                 background:insertAt===i?C.accent:'none',cursor:'pointer',padding:0,color:C.cream,fontSize:'0.55rem',flexShrink:0,
               }}>+</button>
-              <span style={{
-                background:C.accent,color:'white',fontFamily:"'Inconsolata',monospace",
-                fontSize:'0.7rem',padding:'3px 6px',display:'inline-flex',alignItems:'center',gap:4,
-                cursor:'pointer',
-              }}
-                onClick={()=>setEditChip(editChip===i?null:i)}>
+              <span
+                style={{
+                  background:editChip?.idx===i?C.accentH:C.accent,
+                  color:'white',fontFamily:"'Inconsolata',monospace",
+                  fontSize:'0.8rem',padding:'4px 9px',display:'inline-flex',
+                  alignItems:'center',cursor:'pointer',
+                  border:`1px solid ${editChip?.idx===i?C.rule:'transparent'}`,
+                  transition:'background 0.1s',userSelect:'none',
+                  WebkitTapHighlightColor:'transparent',
+                }}
+                onClick={e=>{
+                  e.stopPropagation();
+                  if(editChip?.idx===i){setEditChip(null);return;}
+                  setEditChip({idx:i,y:e.currentTarget.getBoundingClientRect().top});
+                }}>
                 {dn(n)}
-                {editChip===i && (
-                  <>
-                    <button onClick={e=>{e.stopPropagation();flipNote(i);}} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'white',padding:'0 4px',cursor:'pointer',fontSize:'0.6rem'}}>&#8644;</button>
-                    <button onClick={e=>{e.stopPropagation();removeNote(i);setEditChip(null);}} style={{background:'none',border:'none',color:'rgba(255,255,255,0.6)',padding:'0 2px',cursor:'pointer',fontSize:'0.85rem'}}>&times;</button>
-                  </>
-                )}
               </span>
             </React.Fragment>
           ))}
@@ -1822,7 +1904,21 @@ K:${abcKey}${abcClef}
 
   // ── Layout ─────────────────────────────────────────────────────────
   return (
-    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
+    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0,position:'relative'}}
+      onClick={()=>setEditChip(null)}>
+      {editChip!==null && (
+        <ChipPopup
+          note={selNotes[editChip.idx]}
+          anchorY={editChip.y}
+          onClose={()=>setEditChip(null)}
+          onDelete={()=>{removeNote(editChip.idx);setEditChip(null);}}
+          onUpdate={note=>{
+            setSelNotes(prev=>{const n=[...prev];n[editChip.idx]=note;return n;});
+            setEditChip(prev=>({...prev}));
+          }}
+          onRespell={()=>{flipNote(editChip.idx);setEditChip(prev=>({...prev}));}}
+        />
+      )}
       <TopBar
         left={<BackBtn onClick={onBack} />}
         center={piece?.title||(savedExercise?.doc_name?savedExercise.doc_name:'RHYTHMIC VARIATION')}
