@@ -1405,9 +1405,26 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
     };
 
     svg.addEventListener('click',handlePress);
-    let _tx=0,_tswiped=false,_ttimer=null;
-    svg.addEventListener('touchstart',e=>{_tx=e.touches[0].clientX;_tswiped=false;_ttimer=setTimeout(()=>{if(!_tswiped)handlePress(e);_ttimer=null;},150);e.preventDefault();},{passive:false});
-    svg.addEventListener('touchmove',e=>{if(Math.abs(e.touches[0].clientX-_tx)>8){_tswiped=true;if(_ttimer){clearTimeout(_ttimer);_ttimer=null;}}},{passive:true});
+    let _tx=0,_ty=0,_tswiped=false,_ttimer=null;
+    svg.addEventListener('touchstart',e=>{
+      _tx=e.touches[0].clientX;_ty=e.touches[0].clientY;
+      _tswiped=false;
+      _ttimer=setTimeout(()=>{if(!_tswiped)handlePress(e);_ttimer=null;},150);
+      e.preventDefault();
+    },{passive:false});
+    svg.addEventListener('touchmove',e=>{
+      const dx=e.touches[0].clientX-_tx;
+      const dy=e.touches[0].clientY-_ty;
+      if(!_tswiped&&(Math.abs(dx)>8||Math.abs(dy)>8)){
+        _tswiped=true;
+        if(_ttimer){clearTimeout(_ttimer);_ttimer=null;}
+      }
+      if(_tswiped&&pianoScrollRef.current){
+        pianoScrollRef.current.scrollLeft-=dx;
+        _tx=e.touches[0].clientX;
+        _ty=e.touches[0].clientY;
+      }
+    },{passive:true});
     svg.addEventListener('touchend',e=>{if(_ttimer){clearTimeout(_ttimer);_ttimer=null;if(!_tswiped)handlePress(e);}},{passive:true});
     return()=>{alive=false;};
   },[activeGroup,addNote,pianoMounted,accMode]);
@@ -1429,13 +1446,24 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
     const ABCJS = window.ABCJS;
     const div = liveStaffRef.current;
     if(!ABCJS || !div) return;
-    if(!selNotes.length) { div.innerHTML=''; return; }
-    // Build a simple ABC string — one bar of whole notes in current key/clef
-    const keyMap={'C':'C','G':'G','D':'D','A':'A','E':'E','B':'B','Fs':'F#','F':'F','Bb':'Bb','Eb':'Eb','Ab':'Ab','Db':'Db','Gb':'Gb'};
-    const abcKey = keyMap[key]||'C';
     const abcClef = clef==='bass'?' clef=bass':clef==='alto'?' clef=alto':clef==='tenor'?' clef=tenor':'';
-    // Render as quarter notes, 4 per bar
-    const noteAbc = selNotes.map(n=>{
+    const w = Math.max((div.offsetWidth||400)-16, 200);
+    if(!selNotes.length) {
+      // Show empty staff with just the clef — no time sig
+      const abc=`X:1\nM:none\nL:1/32\nK:C${abcClef}\n|z32|`;
+      try {
+        ABCJS.renderAbc(div, abc, {
+          scale:1.0, staffwidth:w,
+          paddingright:8,paddingleft:8,paddingbottom:5,paddingtop:5,
+          add_classes:true,
+        });
+        div.querySelectorAll('svg path,svg rect,svg ellipse,svg line,svg text').forEach(el=>{
+          el.style.fill='#1a1208'; el.style.stroke='#1a1208';
+        });
+      } catch(e){}
+      return;
+    }
+    const abcNotes = selNotes.map(n=>{
       const m=n.match(/^([A-G])(##|bb|#|b|n)?(\d)$/); if(!m) return 'C8';
       const pc=m[1],acc=m[2]||'',oct=parseInt(m[3]);
       const prefix=acc==='##'?'^^':acc==='bb'?'__':acc==='#'?'^':acc==='b'?'_':acc==='n'?'=':'';
@@ -1443,22 +1471,18 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
       const octMod=oct===3?',':(oct===2?',,':(oct===1?',,,':(oct===6?"'":(oct===7?"''":''))));
       return prefix+letter+octMod+'8';
     }).join(' ');
-    const abc=`X:1
-M:4/4
-L:1/32
-K:${abcKey}${abcClef}
-|${noteAbc}|`;
+    const abc=`X:1\nM:none\nL:1/32\nK:C${abcClef}\n|${abcNotes}|`;
     try {
       ABCJS.renderAbc(div, abc, {
-        scale:0.9, staffwidth:Math.min((div.offsetWidth||300)-20,560),
-        paddingright:10,paddingleft:10,paddingbottom:5,paddingtop:5,
+        scale:1.0, staffwidth:w,
+        paddingright:8,paddingleft:8,paddingbottom:5,paddingtop:5,
         add_classes:true,
       });
       div.querySelectorAll('svg path,svg rect,svg ellipse,svg line,svg text').forEach(el=>{
         el.style.fill='#1a1208'; el.style.stroke='#1a1208';
       });
     } catch(e){}
-  },[selNotes,key,clef]);
+  },[selNotes,clef]);
 
   // ── ABCJS exercise rendering ───────────────────────────────────────
   useEffect(()=>{
@@ -1524,9 +1548,21 @@ K:${abcKey}${abcClef}
   };
 
   // ── Playback ───────────────────────────────────────────────────────
+  const [passagePlaying,setPassagePlaying] = useState(false);
+  const passageTimersRef = useRef([]);
+
   const playPassage = () => {
+    if(passagePlaying){
+      passageTimersRef.current.forEach(clearTimeout);
+      passageTimersRef.current=[];
+      setPassagePlaying(false);
+      return;
+    }
     if(!selNotes.length) return;
-    selNotes.forEach((n,i)=>setTimeout(()=>playNote(n),i*550));
+    setPassagePlaying(true);
+    const timers = selNotes.map((n,i)=>setTimeout(()=>playNote(n),i*520));
+    const done = setTimeout(()=>setPassagePlaying(false), selNotes.length*520+200);
+    passageTimersRef.current=[...timers,done];
   };
 
   const stopPlayback = () => {
@@ -1971,16 +2007,16 @@ K:${abcKey}${abcClef}
         </div>
       )}
 
-      {/* Live staff preview */}
-      {selNotes.length>0 && (
+      {/* Live staff preview — always visible once instrument selected */}
+      {activeGroup && instrSelected && (
         <div ref={liveStaffRef}
           style={{background:'white',flexShrink:0,
-            padding:'4px 14px',borderTop:`1px solid ${C.bord}`,
-            minHeight:60,overflowX:'auto'}} />
+            padding:'4px 8px',borderTop:`1px solid ${C.bord}`,
+            minHeight:80,overflowX:'auto',width:'100%',boxSizing:'border-box'}} />
       )}
 
       {/* DRAG TO SCROLL NOTES band */}
-      {selNotes.length>0 && (
+      {activeGroup && instrSelected && selNotes.length>0 && (
         <div style={{background:C.accent,padding:'5px 0',textAlign:'center',flexShrink:0}}>
           <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.55rem',
             letterSpacing:'0.2em',color:'rgba(255,255,255,0.7)'}}>&#8592; DRAG TO SCROLL NOTES &#8594;</span>
@@ -2058,11 +2094,14 @@ K:${abcKey}${abcClef}
       {activeGroup && instrSelected && selNotes.length>0 && (
       <div style={{padding:'8px 20px 16px',flexShrink:0,display:'flex',flexDirection:'column',gap:8}}>
         <button onClick={playPassage} style={{
-          width:'100%',padding:'10px',background:'#2a231d',
-          border:`1px solid ${C.bord}`,color:C.cream,
+          width:'100%',padding:'10px',
+          background:passagePlaying?'#2a1010':'#2a231d',
+          border:`1px solid ${passagePlaying?'#e53535':C.bord}`,
+          color:passagePlaying?'#e53535':C.cream,
           fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.95rem',
           letterSpacing:'0.12em',cursor:'pointer',WebkitTapHighlightColor:'transparent',
-        }}>&#9654; PLAY PASSAGE</button>
+          transition:'all 0.12s',
+        }}>{passagePlaying?'\u25A0 STOP':'&#9654; PLAY PASSAGE'}</button>
         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.58rem',
           letterSpacing:'0.22em',color:C.muted}}>DOCUMENT NAME</div>
         <input type="text" value={docName} onChange={e=>setDocName(e.target.value)}
