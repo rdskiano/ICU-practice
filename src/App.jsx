@@ -1340,7 +1340,13 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
     if(insertAt>=0) setInsertAt(i=>i+1);
   },[accMode,insertAt]);
 
-  const addNoteRef=useRef(addNote);
+  // Stable ref callback — only fires on actual mount/unmount, not every render
+  const pianoRefCb = useCallback(el=>{
+    pianoRef.current=el;
+    if(el) setPianoMounted(c=>c+1);
+  },[]);
+
+  const addNoteRef=useRef(null);
   useEffect(()=>{addNoteRef.current=addNote;},[addNote]);
 
   useEffect(()=>{
@@ -1919,7 +1925,7 @@ K:${abcKey}${abcClef}
       {activeGroup && instrSelected && inputTab==='keys' && (
         <>
           <div style={{flexShrink:0,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
-            <svg ref={el=>{pianoRef.current=el;if(el)setPianoMounted(c=>c+1);}} viewBox="0 0 1008 130" preserveAspectRatio="none"
+            <svg ref={pianoRefCb} viewBox="0 0 1008 130" preserveAspectRatio="none"
               style={{width:2200,height:200,display:'block',cursor:'pointer',touchAction:'none'}} />
           </div>
           <div style={{background:'#0e0c09',padding:'5px 0 3px',textAlign:'center',flexShrink:0}}>
