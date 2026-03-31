@@ -1284,10 +1284,12 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
   // ── Refs ───────────────────────────────────────────────────────────
   const acRef      = useRef(null);
   const pianoRef       = useRef(null);
-  const [pianoMounted,setPianoMounted] = useState(false);
+  const [pianoMounted,setPianoMounted] = useState(0);
   const exDivRef       = useRef(null);
   const liveStaffRef   = useRef(null);
   const micRef     = useRef({active:false,stream:null,ctx:null,analyser:null,timer:null});
+  const addNoteRef = useRef(addNote);
+  useEffect(()=>{ addNoteRef.current = addNote; },[addNote]);
 
   // ── Audio ──────────────────────────────────────────────────────────
   function getAC() {
@@ -1622,8 +1624,10 @@ K:${abcKey}${abcClef}
                 const written=accMode==='flat'&&({'C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab','A#':'Bb'}[note.slice(0,-1)])?({'C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab','A#':'Bb'}[note.slice(0,-1)]+note.slice(-1)):note;
                 // Convert concert pitch → written pitch for transposing instruments
                 const writtenTransposed = transposePitch(written, -instrTranspose, accMode==='flat');
-                addNote(writtenTransposed);setMicStatus(writtenTransposed);
-                lockout=now+600;noteActive=false;stableCount=0;lastFreq=0;
+                noteActive=false;stableCount=0;lastFreq=0;
+                lockout=now+800;
+                addNoteRef.current(writtenTransposed);
+                setMicStatus(writtenTransposed);
               }
             } else {stableCount=1;lastFreq=freq;}
           }
@@ -1921,7 +1925,7 @@ K:${abcKey}${abcClef}
         {/* Keyboard */}
         {inputTab==='keys' && (<>
           <div style={{flexShrink:0,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
-            <svg ref={el=>{pianoRef.current=el;if(el&&!pianoMounted)setPianoMounted(true);}}
+            <svg ref={el=>{pianoRef.current=el;if(el)setPianoMounted(c=>c+1);}}
               viewBox="0 0 1008 130" preserveAspectRatio="none"
               style={{width:2200,height:200,display:'block',cursor:'pointer',touchAction:'none'}} />
           </div>
