@@ -1288,8 +1288,6 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
   const exDivRef       = useRef(null);
   const liveStaffRef   = useRef(null);
   const micRef     = useRef({active:false,stream:null,ctx:null,analyser:null,timer:null});
-  const addNoteRef = useRef(addNote);
-  useEffect(()=>{ addNoteRef.current = addNote; },[addNote]);
 
   // ── Audio ──────────────────────────────────────────────────────────
   function getAC() {
@@ -1337,6 +1335,10 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
     });
     if(insertAt>=0) setInsertAt(i=>i+1);
   },[accMode,insertAt]);
+
+  // addNoteRef always points to the current addNote so mic closure stays fresh
+  const addNoteRef = useRef(addNote);
+  useEffect(()=>{ addNoteRef.current = addNote; },[addNote]);
 
   useEffect(()=>{
     let alive = true;
