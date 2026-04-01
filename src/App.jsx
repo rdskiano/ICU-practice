@@ -1565,8 +1565,12 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
     passageTimersRef.current=[...timers,done];
   };
 
+  const activeOscRef = useRef([]);
+
   const stopPlayback = () => {
     if(playTimerRef.current){clearTimeout(playTimerRef.current);playTimerRef.current=null;}
+    activeOscRef.current.forEach(o=>{try{o.stop();}catch(e){}}); 
+    activeOscRef.current=[];
     setPlayingIdx(-1);
   };
 
@@ -1594,6 +1598,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
       if(pi>=selNotes.length) break;
     }
     setPlayingIdx(idx);
+    activeOscRef.current=[];
     scheduled.forEach(({time,note})=>{
       const st=ac.currentTime+time;
       const f=440*Math.pow(2,(murMidi(note)+instrTranspose-69)/12);
@@ -1603,8 +1608,9 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
       g.gain.setValueAtTime(0,st);g.gain.linearRampToValueAtTime(0.3,st+0.01);
       g.gain.exponentialRampToValueAtTime(0.001,st+0.45);
       o.start(st);o.stop(st+0.5);
+      activeOscRef.current.push(o);
     });
-    playTimerRef.current=setTimeout(()=>setPlayingIdx(-1),(t+0.2)*1000);
+    playTimerRef.current=setTimeout(()=>{setPlayingIdx(-1);activeOscRef.current=[];},(t+0.2)*1000);
   };
 
   // Keep playExercise for single-exercise mode
@@ -1829,7 +1835,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
           <button onClick={()=>playExerciseAt(exIdx)}
             style={{background:playingIdx===exIdx?C.accent:'none',border:`1px solid ${playingIdx===exIdx?C.accent:C.bord}`,
               color:'white',width:30,height:30,borderRadius:'50%',cursor:'pointer',fontSize:'0.75rem'}}>
-            {playingIdx===exIdx?'⏸':'▶'}
+            {playingIdx===exIdx?'\u25A0':'\u25B6'}
           </button>
         </div>
         <button onClick={()=>setExIdx(i=>Math.min(exercises.length-1,i+1))} disabled={exIdx===exercises.length-1}
@@ -1849,8 +1855,8 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
 
       {/* Step 1: grouping */}
       <div style={{padding:'10px 14px',borderBottom:`1px solid ${C.bord}`,flexShrink:0}}>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.78rem',letterSpacing:'0.25em',
-          color:C.cream,marginBottom:8}}>NOTE GROUPING OF PASSAGE</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',letterSpacing:'0.2em',
+          color:C.cream,marginBottom:10}}>NOTE GROUPING OF PASSAGE</div>
         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
           {[3,4,5,6,7,8].map(n=>(
             <button key={n} onClick={()=>setActiveGroup(n)} style={{
@@ -1872,12 +1878,12 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
       {activeGroup && (
       <div style={{padding:'10px 20px',borderBottom:`1px solid ${C.bord}`,
         background:'#0e0c09',flexShrink:0}}>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.78rem',
-          letterSpacing:'0.25em',color:C.cream,marginBottom:10}}>INSTRUMENT SETUP</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+          letterSpacing:'0.2em',color:C.cream,marginBottom:10}}>INSTRUMENT SETUP</div>
         <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-end'}}>
           <div style={{display:'flex',flexDirection:'column',gap:4}}>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.58rem',
-              letterSpacing:'0.22em',color:C.muted}}>CLEF</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.78rem',
+              letterSpacing:'0.18em',color:C.muted}}>CLEF</div>
             <div style={{position:'relative'}}>
               <select value={clef} onChange={e=>setClef(e.target.value)}
                 style={{minWidth:90,appearance:'none',WebkitAppearance:'none',
@@ -1891,9 +1897,9 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
                 color:C.muted,pointerEvents:'none',fontSize:'0.65rem'}}>&#9662;</span>
             </div>
           </div>
-          <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:160}}>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.58rem',
-              letterSpacing:'0.22em',color:C.muted}}>INSTRUMENT</div>
+          <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:160,maxWidth:260}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.78rem',
+              letterSpacing:'0.18em',color:C.muted}}>INSTRUMENT</div>
             <div style={{position:'relative'}}>
               <select value={instrName}
                 onChange={e=>{
@@ -1937,26 +1943,26 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
         padding:'10px 20px',borderBottom:`1px solid ${C.bord}`,flexShrink:0,
         background:'#0e0c09',flexWrap:'wrap',gap:6}}>
-        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.78rem',
-          letterSpacing:'0.25em',color:C.cream}}>ENTER YOUR PASSAGE</span>
+        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+          letterSpacing:'0.2em',color:C.cream}}>ENTER YOUR PASSAGE</span>
         <div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
-          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.52rem',
-            letterSpacing:'0.16em',color:C.muted}}>NOTE ENTRY METHOD</span>
+          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+            letterSpacing:'0.14em',color:C.muted}}>NOTE ENTRY METHOD</span>
           {['keys','mic'].map(t=>(
             <button key={t} onClick={()=>setInputTab(t)} style={{
               padding:'4px 11px',borderRadius:2,
               background:inputTab===t?C.accent:'none',
               border:`1px solid ${inputTab===t?C.accent:'rgba(245,240,232,0.25)'}`,
               color:inputTab===t?'white':'rgba(245,240,232,0.7)',
-              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.68rem',
-              letterSpacing:'0.1em',cursor:'pointer',WebkitTapHighlightColor:'transparent',
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+              letterSpacing:'0.08em',cursor:'pointer',WebkitTapHighlightColor:'transparent',
             }}>{t==='keys'?'♪ KEYBOARD':'● RECORD'}</button>
           ))}
           <button onClick={()=>setAccMode(m=>m==='sharp'?'flat':'sharp')} style={{
             padding:'4px 10px',borderRadius:2,background:'none',
             border:'1px solid rgba(245,240,232,0.25)',
             color:'rgba(245,240,232,0.7)',fontFamily:"'Bebas Neue',sans-serif",
-            fontSize:'0.68rem',letterSpacing:'0.1em',cursor:'pointer',
+            fontSize:'0.85rem',letterSpacing:'0.08em',cursor:'pointer',
             WebkitTapHighlightColor:'transparent',
           }}>{accMode==='sharp'?'SHARPS':'FLATS'}</button>
           <button onClick={()=>{setSelNotes([]);setInsertAt(-1);setRespellChip(null);setGenerated(false);}} style={{
@@ -1977,12 +1983,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
             <svg ref={pianoRefCb} viewBox="0 0 1008 130" preserveAspectRatio="none"
               style={{width:2200,height:200,display:'block',cursor:'pointer',touchAction:'none'}} />
           </div>
-          <div style={{background:'#0e0c09',padding:'5px 0 3px',textAlign:'center',flexShrink:0}}>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.58rem',
-              letterSpacing:'0.2em',color:'rgba(245,240,232,0.35)'}}>&#8592; DRAG TO SCROLL KEYBOARD &#8594;</div>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.52rem',
-              letterSpacing:'0.15em',color:'rgba(245,240,232,0.25)',marginTop:1}}>&#128276; ENSURE DEVICE IS NOT MUTED</div>
-          </div>
+
         </>
       )}
 
@@ -2013,14 +2014,6 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
           style={{background:'white',flexShrink:0,
             padding:'4px 8px',borderTop:`1px solid ${C.bord}`,
             minHeight:80,overflowX:'auto',width:'100%',boxSizing:'border-box'}} />
-      )}
-
-      {/* DRAG TO SCROLL NOTES band */}
-      {activeGroup && instrSelected && selNotes.length>0 && (
-        <div style={{background:C.accent,padding:'5px 0',textAlign:'center',flexShrink:0}}>
-          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.55rem',
-            letterSpacing:'0.2em',color:'rgba(255,255,255,0.7)'}}>&#8592; DRAG TO SCROLL NOTES &#8594;</span>
-        </div>
       )}
 
       {/* Chips — with respell popup and insert buttons */}
@@ -2055,7 +2048,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
                   style={{
                     background:respellChip?.idx===i?C.accentH:C.accent,
                     color:'white',fontFamily:"'Inconsolata',monospace",
-                    fontSize:'0.82rem',padding:'4px 9px',display:'inline-flex',
+                    fontSize:'1rem',padding:'5px 11px',display:'inline-flex',
                     alignItems:'center',cursor:'pointer',userSelect:'none',
                     WebkitTapHighlightColor:'transparent',
                   }}>
@@ -2080,7 +2073,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
         )}
         {selNotes.length>0 && (
           <div style={{marginTop:6}}>
-            <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
+            <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.2rem',
               letterSpacing:'0.1em',color:'#aaa'}}>
               <strong style={{color:'white'}}>{selNotes.length}</strong> PITCHES &nbsp;&#183;&nbsp;
               <strong style={{color:'white'}}>{MUR_DB.filter(p=>p.section===g2s(activeGroup)).length||'—'}</strong> PATTERNS
@@ -2101,9 +2094,9 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
           fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.95rem',
           letterSpacing:'0.12em',cursor:'pointer',WebkitTapHighlightColor:'transparent',
           transition:'all 0.12s',
-        }}>{passagePlaying?'\u25A0 STOP':'&#9654; PLAY PASSAGE'}</button>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.58rem',
-          letterSpacing:'0.22em',color:C.muted}}>DOCUMENT NAME</div>
+        }}>{passagePlaying?'\u25A0 STOP':'\u25B6 PLAY PASSAGE'}</button>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+          letterSpacing:'0.18em',color:C.muted}}>DOCUMENT NAME</div>
         <input type="text" value={docName} onChange={e=>setDocName(e.target.value)}
           placeholder="e.g. Brahms mvt 1"
           style={{fontSize:'0.85rem',padding:'7px 10px',background:'#1a1410',
@@ -2216,7 +2209,7 @@ function AllExercisesView({ exercises, selNotes, clef, murKey, playingIdx, onPla
                 width:26,height:26,borderRadius:'50%',cursor:'pointer',
                 fontSize:'0.65rem',flexShrink:0,
                 display:'flex',alignItems:'center',justifyContent:'center'}}>
-              {playingIdx===i?'⏸':'▶'}
+              {playingIdx===i?'\u25A0':'\u25B6'}
             </button>
             <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.65rem',color:'#9a8e82'}}>
               {ex.pat.timeSig} &nbsp;&middot;&nbsp; {ex.pat.section.replace(' Rhythm Patterns','')}
