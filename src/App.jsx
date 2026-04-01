@@ -1056,7 +1056,8 @@ function ZoomableScore({ src, tapPos, currentPage, totalPages, onPageChange, fle
     const img = imgRef.current;
     const container = containerRef.current;
     if(!img || !container || !tapPos || tapPos.page !== currentPage) return;
-    const imgH = img.offsetHeight;
+    // Wait for image to have real dimensions
+    const imgH = img.naturalHeight && img.offsetHeight ? img.offsetHeight : 0;
     if(!imgH) return;
     const targetY = tapPos.y * imgH;
     container.scrollTop = Math.max(0, targetY - container.clientHeight * 0.3);
@@ -1070,8 +1071,11 @@ function ZoomableScore({ src, tapPos, currentPage, totalPages, onPageChange, fle
   return (
     <div ref={containerRef}
       style={{ position:'relative', background:'#0a0805',
-        overflowY:'auto', overflowX:'hidden',
-        flex, minHeight:0, WebkitOverflowScrolling:'touch' }}>
+        overflowY:'scroll', overflowX:'hidden',
+        flex, minHeight:0, height:0,
+        WebkitOverflowScrolling:'touch',
+        touchAction:'pan-y',
+      }}>
 
       <img ref={imgRef} src={src}
         onLoad={scrollToTap}
