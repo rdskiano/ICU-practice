@@ -943,37 +943,39 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
             style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,0.6)'}}/>
           <div style={{position:'fixed',left:'50%',top:'50%',transform:'translate(-50%,-50%)',
             zIndex:501,background:C.ink,border:`1px solid ${C.bord}`,
-            padding:24,width:340,maxHeight:'70vh',display:'flex',flexDirection:'column',gap:12,
+            padding:24,width:340,display:'flex',flexDirection:'column',gap:12,
             boxShadow:'0 8px 40px rgba(0,0,0,0.8)'}}>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
               letterSpacing:'0.18em',color:C.gold}}>SELECT A PIECE TO LOCATE IN</div>
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-              fontSize:'0.9rem',color:C.muted}}>
-              "{locatePicker.doc_name||'Untitled'}" — tap a piece to open its score, then tap the spot where this passage lives.
+              fontSize:'0.9rem',color:C.muted,lineHeight:1.4}}>
+              Tap a piece to open its score, then tap the spot where "<strong style={{color:C.cream,fontStyle:'normal'}}>{locatePicker.doc_name||'Untitled'}</strong>" lives.
             </div>
-            <div style={{overflowY:'auto',flex:'1 1 0',display:'flex',flexDirection:'column',gap:6}}>
+            <div style={{overflowY:'auto',maxHeight:'40vh',display:'flex',flexDirection:'column',gap:6}}>
               {pieces.length===0 && (
                 <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
                   fontSize:'0.9rem',color:C.muted,padding:'8px 0'}}>
-                  No repertoire in library yet.
+                  No repertoire in library yet — add some first.
                 </div>
               )}
               {pieces.map(p=>(
                 <button key={p.id} onClick={()=>openLocateWithPiece(locatePicker,p)}
-                  style={{textAlign:'left',padding:'12px 14px',background:C.panel,
-                    border:`1px solid ${C.bord}`,cursor:'pointer',
-                    WebkitTapHighlightColor:'transparent'}}>
-                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+                  style={{textAlign:'left',padding:'14px 16px',background:C.panel,
+                    border:`1px solid ${C.bord}`,cursor:'pointer',width:'100%',
+                    WebkitTapHighlightColor:'transparent',transition:'background 0.1s'}}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.surf}
+                  onMouseLeave={e=>e.currentTarget.style.background=C.panel}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
                     letterSpacing:'0.08em',color:C.cream}}>{p.title||'Untitled'}</div>
-                  <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',
-                    color:C.muted,marginTop:2}}>{p.composer||''}</div>
+                  {p.composer && <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.78rem',
+                    color:C.muted,marginTop:3}}>{p.composer}</div>}
                 </button>
               ))}
             </div>
             <button onClick={()=>setLocatePicker(null)}
               style={{padding:'10px',background:'none',border:`1px solid ${C.bord}`,
                 color:C.muted,fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
-                letterSpacing:'0.1em',cursor:'pointer'}}>CANCEL</button>
+                letterSpacing:'0.1em',cursor:'pointer',WebkitTapHighlightColor:'transparent'}}>CANCEL</button>
           </div>
         </>
       )}
