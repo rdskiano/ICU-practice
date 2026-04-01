@@ -121,11 +121,12 @@ function useOrientation() {
 }
 
 function useIsLarge() {
-  const [large,setLarge] = useState(()=>window.innerWidth>=768);
+  const [large,setLarge] = useState(()=>Math.max(window.innerWidth,window.innerHeight)>=768);
   useEffect(()=>{
-    const u = ()=>setLarge(window.innerWidth>=768);
+    const u = ()=>setLarge(Math.max(window.innerWidth,window.innerHeight)>=768);
     window.addEventListener('resize',u);
-    return ()=>window.removeEventListener('resize',u);
+    window.addEventListener('orientationchange',()=>setTimeout(u,150));
+    return ()=>{window.removeEventListener('resize',u);};
   },[]);
   return large;
 }
@@ -1675,9 +1676,9 @@ function ZoomableScore({ src, tapPos, currentPage, totalPages, onPageChange, fle
 
       {/* Page nav */}
       {totalPages > 1 && (
-        <div style={{ position:'sticky', bottom:0, display:'flex',
+        <div style={{ position:'sticky', bottom:0, zIndex:10, display:'flex',
           alignItems:'center', justifyContent:'center', gap:12,
-          padding:'6px 12px', background:'rgba(26,22,18,0.9)',
+          padding:'8px 12px', background:'rgba(26,22,18,0.97)',
           borderTop:`1px solid ${C.bord}` }}>
           <button onClick={()=>onPageChange(p=>Math.max(0,p-1))}
             disabled={currentPage===0}
@@ -1847,7 +1848,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
   const [playingIdx,setPlayingIdx]   = useState(-1);
   const playTimerRef = useRef(null);
   const [saveMsg,setSaveMsg]         = useState('');
-  const [currentPage,setCurrentPage] = useState(0);
+  const [currentPage,setCurrentPage] = useState(tapPos?.page||0);
   const [insertAt,setInsertAt]       = useState(-1);
   const [editChip,setEditChip]       = useState(null);
   const [instrSelected,setInstrSelected] = useState(!!savedExercise);
@@ -2280,7 +2281,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
       return;
     }
     try {
-      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
       mic.stream=stream;
       mic.ctx=new(window.AudioContext||window.webkitAudioContext)();
       if(mic.ctx.state==='suspended')await mic.ctx.resume();
@@ -2295,7 +2296,15 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
         const {freq,rms}=autoCorr(buf,mic.ctx.sampleRate);
         const now=Date.now();
         if(rms>0.005)lastSound=now;
-        if(lastSound>0&&now-lastSound>3000){mic.active=false;setMicActive(false);setMicStatus('');return;}
+        if(lastSound>0&&now-lastSound>3000){
+          mic.active=false;
+          if(mic.timer)clearTimeout(mic.timer);
+          if(mic.stream)mic.stream.getTracks().forEach(t=>t.stop());
+          if(mic.ctx)mic.ctx.close();
+          mic.stream=mic.ctx=mic.analyser=null;
+          setMicActive(false);setMicStatus('');
+          return;
+        }
         if(now<lockout){mic.timer=setTimeout(detect,25);return;}
         const note=freq>0?freqToNote(freq):null;
         if(rms<0.008){noteActive=false;stableCount=0;lastFreq=0;}
@@ -2419,7 +2428,8 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
         }).catch(()=>{});
       }
     } catch(e){}
-    setGenerated(false);
+    // Go back to score if we came from one, otherwise just close exercises
+    if(piece && pageImages.length>0) { onBack(); } else { setGenerated(false); }
   };
 
   const ExercisePanelLarge = generated && exercises.length>0 && (
@@ -2774,38 +2784,34 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
       </div>
       )}
 
-      {/* Play + Generate + Save — gated until notes entered */}
+      {/* Name + Generate — visible once notes entered */}
       {activeGroup && instrSelected && selNotes.length>0 && (
       <div style={{padding:'8px 20px 16px',flexShrink:0,display:'flex',flexDirection:'column',gap:8}}>
-        <button onClick={playPassage} style={{
-          width:'100%',padding:'10px',
-          background:passagePlaying?'#2a1010':'#2a231d',
-          border:`1px solid ${passagePlaying?'#e53535':C.bord}`,
-          color:passagePlaying?'#e53535':C.cream,
-          fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.95rem',
-          letterSpacing:'0.12em',cursor:'pointer',WebkitTapHighlightColor:'transparent',
-          transition:'all 0.12s',
-        }}>{passagePlaying?'\u25A0 STOP':'\u25B6 PLAY PASSAGE'}</button>
         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
-          letterSpacing:'0.18em',color:C.muted}}>DOCUMENT NAME</div>
+          letterSpacing:'0.18em',color:C.muted}}>EXERCISE NAME (REQUIRED)</div>
         <input type="text" value={docName} onChange={e=>setDocName(e.target.value)}
-          placeholder="Title required to save"
+          placeholder="Name before generating"
           style={{fontSize:'0.85rem',padding:'7px 10px',background:'#1a1410',
-            border:`1px solid ${C.bord}`,color:C.cream,
+            border:`1px solid ${docName.trim()?C.bord:'#6a3a1a'}`,color:C.cream,
             fontFamily:"'Inconsolata',monospace",outline:'none'}} />
         <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:8}}>
-          <button onClick={generate} disabled={!canGenerate} style={{
-            padding:'13px',background:canGenerate?C.accent:'#2a231d',
-            border:`1px solid ${canGenerate?C.accent:C.bord}`,
-            color:canGenerate?'white':C.dim,
+          <button onClick={generate} disabled={!canGenerate||!docName.trim()} style={{
+            padding:'13px',background:(canGenerate&&docName.trim())?C.accent:'#2a231d',
+            border:`1px solid ${(canGenerate&&docName.trim())?C.accent:C.bord}`,
+            color:(canGenerate&&docName.trim())?'white':C.dim,
             fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
-            letterSpacing:'0.12em',cursor:canGenerate?'pointer':'not-allowed',
+            letterSpacing:'0.12em',cursor:(canGenerate&&docName.trim())?'pointer':'not-allowed',
             WebkitTapHighlightColor:'transparent',
           }}>GENERATE EXERCISES</button>
-          <Btn onClick={saveExercise} disabled={!canGenerate||saving||!docName.trim()} full
-            style={{fontSize:'0.75rem',color:C.cream,borderColor:C.bord2}}>
-            {saving?'SAVING...':'SAVE'}
-          </Btn>
+          <button onClick={playPassage} disabled={!selNotes.length} style={{
+            padding:'13px',
+            background:passagePlaying?'#2a1010':'#2a231d',
+            border:`1px solid ${passagePlaying?'#e53535':C.bord}`,
+            color:passagePlaying?'#e53535':C.cream,
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.95rem',
+            letterSpacing:'0.08em',cursor:'pointer',WebkitTapHighlightColor:'transparent',
+            transition:'all 0.12s',
+          }}>{passagePlaying?'\u25A0 STOP':'\u25B6 PLAY'}</button>
         </div>
         {saveMsg && <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',
           color:saveMsg.includes('title')||saveMsg.includes('failed')?'#e57373':C.gold}}>{saveMsg}</div>}
