@@ -737,18 +737,17 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
   const fileRef = useRef();
   const INSTRUMENTS = ['Flute','Oboe','Clarinet','Bassoon','Saxophone','Horn','Trumpet','Trombone','Tuba','Violin','Viola','Cello','Double Bass','Harp','Piano','Percussion','Voice','Other'];
 
-  useEffect(()=>{ loadAll(); },[tab]);
+  useEffect(()=>{ loadAll(); },[]);
 
   const loadAll = async () => {
     setLoading(true);
     try {
-      if(tab==='pieces'){
-        const r = await sbGet(`/rest/v1/pieces?user_email=eq.${encodeURIComponent(profile.email)}&order=composer.asc,title.asc`);
-        setPieces(await r.json()||[]);
-      } else {
-        const r = await sbGet(`/rest/v1/exercises?user_email=eq.${encodeURIComponent(profile.email)}&order=created_at.desc`);
-        setExercises(await r.json()||[]);
-      }
+      const [rp, re] = await Promise.all([
+        sbGet(`/rest/v1/pieces?user_email=eq.${encodeURIComponent(profile.email)}&order=composer.asc,title.asc`),
+        sbGet(`/rest/v1/exercises?user_email=eq.${encodeURIComponent(profile.email)}&order=created_at.desc`),
+      ]);
+      setPieces(await rp.json()||[]);
+      setExercises(await re.json()||[]);
     } catch { setPieces([]); setExercises([]); }
     setLoading(false);
   };
@@ -1056,11 +1055,18 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
 
         {tab==='exercises' && (
           <>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+              fontSize:'0.9rem',color:C.muted,padding:'4px 0 12px',lineHeight:1.4}}>
+              Exercises without a score location. Tap 📍 to link one to a spot in your repertoire.
+            </div>
             {loading && <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.85rem',color:C.muted,textAlign:'center',padding:40}}>Loading...</div>}
-            {!loading && exercises.length===0 && (
-              <div style={{textAlign:'center',padding:60,color:C.muted,fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',fontSize:'1.1rem'}}>No saved exercises yet</div>
+            {!loading && exercises.filter(ex=>ex.score_page==null&&ex.score_y==null).length===0 && (
+              <div style={{textAlign:'center',padding:60,color:C.muted,fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',fontSize:'1.1rem'}}>
+                {exercises.length>0 ? 'All exercises have been located — access them by tapping their spot in the score' : 'No saved exercises yet'}
+              </div>
             )}
             {exercises
+              .filter(ex=> (ex.score_page == null && ex.score_y == null)) // only unlocated
               .filter(ex=>!q||(ex.doc_name||'').toLowerCase().includes(q)||(ex.instrument||'').toLowerCase().includes(q))
               .map(ex=>{
               const isLocated = ex.score_page != null || ex.score_y != null;
@@ -1075,25 +1081,16 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
                   <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
                     letterSpacing:'0.08em',color:C.cream}}>{ex.doc_name||'Untitled'}</div>
                   <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',
-                    color:C.muted,marginTop:3,display:'flex',alignItems:'center',gap:6}}>
-                    <span>{[ex.instrument,ex.grouping].filter(Boolean).join(' · ')}</span>
-                    {!isLocated && (
-                      <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.62rem',
-                        letterSpacing:'0.12em',color:'#6a5a2a',
-                        border:'1px solid #4a3a1a',padding:'1px 5px'}}>
-                        UNLOCATED
-                      </span>
-                    )}
+                    color:C.muted,marginTop:3}}>
+                    {[ex.instrument,ex.grouping].filter(Boolean).join(' · ')}
                   </div>
                 </div>
-                {!isLocated && (
-                  <button
-                    onClick={e=>{e.stopPropagation();openLocate(ex);}}
-                    style={{padding:'10px 12px',background:'none',border:'none',
-                      color:C.gold,cursor:'pointer',fontSize:'1.1rem',flexShrink:0,
-                      WebkitTapHighlightColor:'transparent'}}
-                    title="Locate in score">📍</button>
-                )}
+                <button
+                  onClick={e=>{e.stopPropagation();openLocate(ex);}}
+                  style={{padding:'10px 12px',background:'none',border:'none',
+                    color:C.gold,cursor:'pointer',fontSize:'1.1rem',flexShrink:0,
+                    WebkitTapHighlightColor:'transparent'}}
+                  title="Locate in score">📍</button>
                 <button
                   onClick={e=>{e.stopPropagation();setConfirmDel({type:'exercise',id:ex.id,title:ex.doc_name||'Untitled',...ex});}}
                   style={{padding:'14px 16px',background:'none',border:'none',
