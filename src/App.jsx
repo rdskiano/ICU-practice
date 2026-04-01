@@ -520,8 +520,9 @@ export default function App() {
   const [goalTempo,setGoalTempo]   = useState(120);
   const [increment,setIncrement]   = useState(5);
   const [savedExercise,setSavedExercise] = useState(null);
-  const [sessionMode,setSessionMode]   = useState('massed'); // 'massed' | 'interleaved'
-  const [tapPos,setTapPos]             = useState(null);     // {page,x,y} where user tapped
+  const [sessionMode,setSessionMode]   = useState('massed');
+  const [tapPos,setTapPos]             = useState(null);
+  const [showOverlay,setShowOverlay]   = useState(false);
   const N = markers.length;
 
   const saveProf = p => { setProfile(p); setProfileState(p); };
@@ -561,20 +562,28 @@ export default function App() {
           onBack={()=>setScreen('library')}
           onTapPassage={(pos)=>{
             setTapPos(pos);
-            setScreen('strategy-menu');
+            setShowOverlay(true);
           }}
         />
       )}
 
-      {/* Strategy picker — appears after tapping a passage */}
-      {screen==='strategy-menu' && (
-        <StrategyMenuScreen
+      {/* Strategy overlay — rendered at root level so position:fixed works correctly */}
+      {screen==='score' && showOverlay && (
+        <StrategyOverlay
           piece={piece}
+          profile={profile}
           tapPos={tapPos}
-          sessionMode={sessionMode}
-          onICU={()=>{ setMarkers([]); setScreen('mark'); }}
-          onMUR={()=>{ setSavedExercise(null); setScreen('mur'); }}
-          onBack={()=>setScreen('score')}
+          onClose={()=>setShowOverlay(false)}
+          onICU={()=>{
+            setShowOverlay(false);
+            setMarkers([]);
+            setScreen('mark');
+          }}
+          onRV={(ex)=>{
+            setShowOverlay(false);
+            setSavedExercise(ex||null);
+            setScreen('mur');
+          }}
         />
       )}
 
@@ -583,7 +592,7 @@ export default function App() {
           piece={piece} pageImages={pageImages}
           currentPage={currentPage} setCurrentPage={setCurrentPage}
           markers={markers} setMarkers={setMarkers}
-          onBack={()=>setScreen('strategy-menu')}
+          onBack={()=>setScreen('score')}
           onNext={()=>setScreen('params')}
         />
       )}
@@ -939,6 +948,167 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   STRATEGY OVERLAY — floating panel over score
+═══════════════════════════════════════════════════════════════════════ */
+function StrategyOverlay({ piece, profile, tapPos, onClose, onICU, onRV }) {
+  const [panel, setPanel] = useState('strategies'); // 'strategies' | 'rv'
+  const [exercises, setExercises] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const openRV = async () => {
+    setPanel('rv');
+    setLoading(true);
+    try {
+      // Fetch exercises for this piece, then filter by proximity to tap
+      const url = piece?.id
+        ? `/rest/v1/exercises?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${piece.id}&order=created_at.desc`
+        : `/rest/v1/exercises?user_email=eq.${encodeURIComponent(profile.email)}&order=created_at.desc&limit=20`;
+      const r = await sbGet(url);
+      const all = await r.json() || [];
+      // Filter to exercises near the tap position (±15% Y, same page)
+      const nearby = all.filter(ex => {
+        if(!tapPos) return true;
+        const samePage = ex.score_page == null || ex.score_page === tapPos.page;
+        const closeY = ex.score_y == null || Math.abs(ex.score_y - tapPos.y) < 0.15;
+        return samePage && closeY;
+      });
+      setExercises(nearby);
+    } catch { setExercises([]); }
+    setLoading(false);
+  };
+
+  const cardBase = {
+    display:'flex', flexDirection:'column', gap:8,
+    padding:'18px 20px', cursor:'pointer', textAlign:'left', width:'100%',
+    WebkitTapHighlightColor:'transparent',
+    transition:'background 0.12s',
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{
+        position:'fixed', inset:0, zIndex:400,
+        background:'rgba(0,0,0,0.55)',
+      }}/>
+
+      {/* Panel — bottom sheet style */}
+      <div style={{
+        position:'fixed', left:0, right:0, bottom:0, zIndex:401,
+        background:C.ink, borderTop:`3px solid ${C.accent}`,
+        borderRadius:'12px 12px 0 0',
+        maxHeight:'70vh', overflowY:'auto',
+        WebkitOverflowScrolling:'touch',
+        boxShadow:'0 -8px 40px rgba(0,0,0,0.6)',
+      }}>
+        {/* Handle */}
+        <div style={{display:'flex',justifyContent:'center',padding:'10px 0 0'}}>
+          <div style={{width:40,height:4,borderRadius:2,background:C.bord2}}/>
+        </div>
+
+        {panel === 'strategies' && (
+          <div style={{padding:'8px 16px 32px',display:'flex',flexDirection:'column',gap:10}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+              letterSpacing:'0.22em',color:C.muted,padding:'4px 4px 8px',
+              borderBottom:`1px solid ${C.bord}`}}>
+              CHOOSE A PRACTICE STRATEGY
+            </div>
+
+            {/* ICU card */}
+            <button style={{...cardBase,border:`2px solid ${C.accent}`,background:'transparent'}}
+              onClick={onICU}
+              onMouseEnter={e=>e.currentTarget.style.background=C.panel}
+              onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',
+                letterSpacing:'0.12em',color:C.accent}}>INTERLEAVED CLICK-UP</div>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                fontSize:'0.95rem',color:C.cream,lineHeight:1.5}}>
+                Build speed gradually — add one unit at a time, cycling through tempo increments.
+              </div>
+            </button>
+
+            {/* RV card */}
+            <button style={{...cardBase,border:`2px solid ${C.gold}`,background:'transparent'}}
+              onClick={openRV}
+              onMouseEnter={e=>e.currentTarget.style.background=C.panel}
+              onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',
+                letterSpacing:'0.12em',color:C.gold}}>RHYTHMIC VARIATION</div>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                fontSize:'0.95rem',color:C.cream,lineHeight:1.5}}>
+                Practice your passage in every rhythm pattern — a complete systematic workout.
+              </div>
+            </button>
+          </div>
+        )}
+
+        {panel === 'rv' && (
+          <div style={{padding:'8px 16px 32px',display:'flex',flexDirection:'column',gap:10}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,
+              padding:'4px 4px 10px',borderBottom:`1px solid ${C.bord}`}}>
+              <button onClick={()=>setPanel('strategies')} style={{
+                background:'none',border:'none',color:C.muted,cursor:'pointer',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
+                letterSpacing:'0.1em',padding:'2px 0',
+              }}>← BACK</button>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                letterSpacing:'0.22em',color:C.muted,flex:1}}>RHYTHMIC VARIATION</div>
+            </div>
+
+            {/* Create new */}
+            <button style={{...cardBase,border:`2px solid ${C.gold}`,background:'transparent'}}
+              onClick={()=>onRV(null)}
+              onMouseEnter={e=>e.currentTarget.style.background=C.panel}
+              onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
+                letterSpacing:'0.12em',color:C.gold}}>+ CREATE NEW EXERCISE</div>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                fontSize:'0.9rem',color:C.muted}}>Enter notes and generate a new set of patterns</div>
+            </button>
+
+            {/* Nearby saved exercises */}
+            {loading && (
+              <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',
+                color:C.muted,padding:'12px 4px'}}>Loading saved exercises…</div>
+            )}
+            {!loading && exercises.length > 0 && (
+              <>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',
+                  letterSpacing:'0.2em',color:C.muted,padding:'4px 4px 0'}}>
+                  SAVED EXERCISES NEAR THIS SPOT
+                </div>
+                {exercises.map(ex=>(
+                  <button key={ex.id}
+                    style={{...cardBase,border:`1px solid ${C.bord}`,background:C.panel}}
+                    onClick={()=>onRV(ex)}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.surf}
+                    onMouseLeave={e=>e.currentTarget.style.background=C.panel}>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+                      letterSpacing:'0.08em',color:C.cream}}>
+                      {ex.doc_name||'Untitled Exercise'}
+                    </div>
+                    <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.72rem',color:C.muted}}>
+                      {[ex.grouping, ex.instrument].filter(Boolean).join(' · ')}
+                      {ex.notes ? ` · ${ex.notes.split(',').filter(Boolean).length} notes` : ''}
+                    </div>
+                  </button>
+                ))}
+              </>
+            )}
+            {!loading && exercises.length === 0 && (
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                fontSize:'0.9rem',color:C.muted,padding:'4px 4px'}}>
+                No saved exercises near this spot yet.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    STRATEGY MENU — appears after tapping a passage
 ═══════════════════════════════════════════════════════════════════════ */
 function StrategyMenuScreen({ piece, tapPos, sessionMode, onICU, onMUR, onBack }) {
@@ -1277,6 +1447,14 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
       setExercises(pats.map(p=>({pat:p,abc:null})));
       setExIdx(0);
       setGenerated(true);
+    } else if(savedExercise && piece && savedExercise.notes) {
+      // Loaded from RV overlay with a saved exercise — auto-generate
+      const grp = parseInt(savedExercise.grouping?.match(/\d+/)?.[0]||'4');
+      const sec = g2s(grp);
+      const pats = MUR_DB.filter(p=>p.section===sec);
+      setExercises(pats.map(p=>({pat:p,abc:null})));
+      setExIdx(0);
+      setGenerated(true);
     }
   },[]);
 
@@ -1544,7 +1722,10 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
       await sbPost('/rest/v1/exercises',{
         user_email:profile.email,doc_name:docName.trim()||null,
         grouping:g2s(activeGroup),clef,key,notes:selNotes.join(','),
-        instrument:profile.instrument||'',
+        instrument:instrName||profile.instrument||'',
+        piece_id:piece?.id||null,
+        score_page:tapPos?.page??null,
+        score_y:tapPos?.y??null,
       });
       setSaveMsg('Saved!');setTimeout(()=>setSaveMsg(''),2000);
     } catch { setSaveMsg('Save failed.'); }
