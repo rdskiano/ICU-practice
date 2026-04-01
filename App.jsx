@@ -1048,9 +1048,14 @@ function LibraryScreen({ profile, refreshKey, onSelectRepertoire, onLocateReady,
                 <button
                   onClick={e=>{e.stopPropagation();handleLocate(ex);}}
                   title="Attach to a score location"
-                  style={{padding:'14px 12px',background:'none',border:'none',
-                    color:C.gold,cursor:'pointer',fontSize:'1.1rem',flexShrink:0,
-                    WebkitTapHighlightColor:'transparent'}}>📍</button>
+                  style={{padding:'8px 12px',background:'none',
+                    border:`1px solid ${C.gold}`,borderRadius:3,
+                    color:C.gold,cursor:'pointer',
+                    fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.8rem',
+                    letterSpacing:'0.1em',flexShrink:0,margin:'0 8px',
+                    WebkitTapHighlightColor:'transparent'}}>
+                  📍 LOCATE
+                </button>
                 <button
                   onClick={e=>{e.stopPropagation();setConfirmDel({type:'exercise',id:ex.id,title:ex.doc_name||'Untitled',...ex});}}
                   style={{padding:'14px 16px',background:'none',border:'none',
