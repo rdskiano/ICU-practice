@@ -3118,10 +3118,8 @@ function ParamsScreen({ N, startTempo, setStartTempo, goalTempo, setGoalTempo, i
             {Math.floor((goalTempo-startTempo)/increment)+1} steps per phase &nbsp;&middot;&nbsp; {N} phases
           </div>
         )}
-      </div>
-      <div style={{padding:'10px 20px',borderTop:`1px solid ${C.bord}`,flexShrink:0,background:C.ink}}>
         <Btn onClick={onStart} disabled={!valid} big full
-          style={{background:valid?C.accent:'transparent',color:valid?'white':C.dim,borderColor:valid?C.accent:C.bord,fontSize:'1.3rem',padding:'18px 24px',letterSpacing:'0.15em'}}>
+          style={{background:valid?C.accent:'transparent',color:valid?'white':C.dim,borderColor:valid?C.accent:C.bord,fontSize:'1.3rem',padding:'18px 24px',letterSpacing:'0.15em',marginTop:8}}>
           BEGIN SESSION →
         </Btn>
       </div>
@@ -3277,7 +3275,44 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
   );
 
   const photoBlock = (
-    <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex'}}>
+    <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex',position:'relative'}}>
+
+      {/* Floating NEXT PHASE — left side */}
+      <button onClick={()=>setIdx(nextPhaseIdx)} disabled={!hasNextPhase}
+        style={{
+          position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',
+          zIndex:10,
+          background:hasNextPhase?'rgba(42,35,29,0.92)':'rgba(20,16,12,0.5)',
+          border:'none',borderRadius:'0 6px 6px 0',
+          color:hasNextPhase?C.cream:'#444',
+          padding:'18px 10px',cursor:hasNextPhase?'pointer':'default',
+          display:'flex',flexDirection:'column',alignItems:'center',gap:2,
+          WebkitTapHighlightColor:'transparent',
+        }}>
+        <span style={{fontSize:'1rem'}}>«</span>
+        {['N','E','X','T','','P','H','A','S','E'].map((ch,i)=>(
+          <span key={i} style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',letterSpacing:'0.05em',lineHeight:ch?1:0.4}}>{ch}</span>
+        ))}
+      </button>
+
+      {/* Floating NEXT STEP — right side */}
+      <button onClick={()=>setIdx(i=>Math.min(steps.length-1,i+1))} disabled={idx>=steps.length-1}
+        style={{
+          position:'absolute',right:0,top:'50%',transform:'translateY(-50%)',
+          zIndex:10,
+          background:idx<steps.length-1?'rgba(139,58,26,0.92)':'rgba(20,16,12,0.5)',
+          border:'none',borderRadius:'6px 0 0 6px',
+          color:idx<steps.length-1?'white':'#444',
+          padding:'18px 10px',cursor:idx<steps.length-1?'pointer':'default',
+          display:'flex',flexDirection:'column',alignItems:'center',gap:2,
+          WebkitTapHighlightColor:'transparent',
+        }}>
+        <span style={{fontSize:'1rem'}}>»</span>
+        {['N','E','X','T','','S','T','E','P'].map((ch,i)=>(
+          <span key={i} style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',letterSpacing:'0.05em',lineHeight:ch?1:0.4}}>{ch}</span>
+        ))}
+      </button>
+
       <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
         <img ref={imgRef} src={pageImages[currentPage]}
           onLoad={()=>{setImgLoaded(true);requestAnimationFrame(()=>drawOverlay());}}
@@ -3326,25 +3361,11 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
     </div>
   );
 
-  const bottomBar = (
-    <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:0,flexShrink:0,borderTop:`2px solid ${C.bord}`}}>
-      <Btn onClick={()=>setIdx(nextPhaseIdx)} disabled={!hasNextPhase} full
-        style={{padding:'12px 8px',fontSize:'1rem',borderRadius:0,border:'none',borderRight:`1px solid ${C.bord}`,background:hasNextPhase?C.panel:'transparent',color:hasNextPhase?C.cream:C.dim}}>
-        NEXT PHASE »
-      </Btn>
-      <Btn onClick={()=>setIdx(i=>Math.min(steps.length-1,i+1))} disabled={idx>=steps.length-1} full
-        style={{padding:'12px 8px',fontSize:'1.1rem',borderRadius:0,border:'none',background:idx>=steps.length-1?'transparent':C.accent,color:'white'}}>
-        NEXT STEP →
-      </Btn>
-    </div>
-  );
-
   return (
     <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0,background:C.ink}}>
       {topBarContent(land)}
       {progressBar}
       {photoBlock}
-      {bottomBar}
     </div>
   );
 }
