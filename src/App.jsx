@@ -1273,22 +1273,22 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
       </div>
 
       {/* Score */}
-      <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex',overflow:'hidden'}}>
-        <div style={{position:'relative',flex:1,minWidth:0,minHeight:0,overflowY:'scroll',overflowX:'hidden',WebkitOverflowScrolling:'touch'}}>
+      <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex'}}>
+        <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
           <img data-page={currentPage} src={pageImages[currentPage]}
             onClick={handleTap}
-            style={{width:'100%',height:'auto',display:'block',
-              userSelect:'none',WebkitUserSelect:'none',cursor:'crosshair',WebkitTouchCallout:'none'}}
+            style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
+              userSelect:'none',WebkitUserSelect:'none',cursor:'crosshair'}}
             onContextMenu={e=>e.preventDefault()}
             draggable={false} />
         </div>
         {showTwo && rightPage!==null && (
-          <div style={{position:'relative',flex:1,minWidth:0,minHeight:0,
-            borderLeft:`1px solid ${C.bord}`,overflowY:'scroll',overflowX:'hidden',WebkitOverflowScrolling:'touch'}}>
+          <div style={{position:'relative',flex:1,minWidth:0,
+            borderLeft:`1px solid ${C.bord}`,overflow:'hidden'}}>
             <img data-page={rightPage} src={pageImages[rightPage]}
               onClick={handleTap}
-              style={{width:'100%',height:'auto',display:'block',
-                userSelect:'none',WebkitUserSelect:'none',cursor:'crosshair',WebkitTouchCallout:'none'}}
+              style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
+                userSelect:'none',WebkitUserSelect:'none',cursor:'crosshair'}}
               onContextMenu={e=>e.preventDefault()}
               draggable={false} />
           </div>
@@ -2931,6 +2931,12 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
   const showTwoPages = land && totalPages>1;
   const rightPage = currentPage+1<totalPages?currentPage+1:null;
 
+  const drawArrow = (ctx,px,py,color) => {
+    const w=10,h=13;
+    ctx.fillStyle=color;
+    ctx.beginPath();ctx.moveTo(px-w,py-h-2);ctx.lineTo(px+w,py-h-2);ctx.lineTo(px,py-2);ctx.closePath();ctx.fill();
+  };
+
   const drawPage = (canvas,img,pageIdx) => {
     if(!canvas||!img) return;
     const w=img.clientWidth, h=img.clientHeight;
@@ -2938,7 +2944,6 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
     canvas.width=w; canvas.height=h;
     canvas.style.width=w+'px'; canvas.style.height=h+'px';
     const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,w,h);
-    // No letterboxing — image is full width, height:auto, so clientWidth/clientHeight is accurate
     markers.filter(m=>m.page===pageIdx).forEach(m=>{
       drawArrow(ctx, m.x*w, m.y*h, C.accent);
     });
@@ -3037,27 +3042,27 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
         </div>
       </div>
 
-      <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex',flexDirection:'row',overflow:'hidden'}}>
-        <div style={{position:'relative',flex:1,minWidth:0,minHeight:0,overflowY:'scroll',overflowX:'hidden',WebkitOverflowScrolling:'touch'}}>
+      <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex',flexDirection:'row'}}>
+        <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
           <img ref={imgRef} src={pageImages[currentPage]}
             onLoad={()=>{setLoaded(true);requestAnimationFrame(()=>draw());}}
             onClick={handleTap}
-            style={{width:'100%',height:'auto',display:'block',
+            style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
               userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none'}}
             onContextMenu={e=>e.preventDefault()}
             draggable={false} />
-          <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,pointerEvents:'none'}} />
+          <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none'}} />
         </div>
         {showTwoPages&&rightPage!==null&&(
-          <div style={{position:'relative',flex:1,minWidth:0,minHeight:0,borderLeft:`1px solid ${C.bord}`,overflowY:'scroll',overflowX:'hidden',WebkitOverflowScrolling:'touch'}}>
+          <div style={{position:'relative',flex:1,minWidth:0,borderLeft:`1px solid ${C.bord}`,overflow:'hidden'}}>
             <img ref={imgRef2} src={pageImages[rightPage]}
               onLoad={()=>{setLoaded2(true);requestAnimationFrame(()=>draw());}}
               onClick={handleTap2}
-              style={{width:'100%',height:'auto',display:'block',
+              style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
                 userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none'}}
               onContextMenu={e=>e.preventDefault()}
               draggable={false} />
-            <canvas ref={canvasRef2} style={{position:'absolute',top:0,left:0,pointerEvents:'none'}} />
+            <canvas ref={canvasRef2} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none'}} />
           </div>
         )}
       </div>
@@ -3204,20 +3209,24 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
     return ()=>document.removeEventListener('visibilitychange', onVisible);
   },[metroOn]);
 
+  const drawArrow = (ctx,px,py,color) => {
+    const w=10,h=13;ctx.fillStyle=color;
+    ctx.beginPath();ctx.moveTo(px-w,py-h-2);ctx.lineTo(px+w,py-h-2);ctx.lineTo(px,py-2);ctx.closePath();ctx.fill();
+  };
+
   const drawOnCanvas = useCallback((canvas,img,pageIdx)=>{
     if(!canvas||!img||!img.complete) return;
-    const w=img.clientWidth, h=img.clientHeight; if(!w||!h) return;
-    canvas.width=w; canvas.height=h;
-    canvas.style.width=w+'px'; canvas.style.height=h+'px';
-    const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,w,h);
+    const w=img.clientWidth,h=img.clientHeight;if(!w||!h) return;
+    canvas.width=w;canvas.height=h;canvas.style.width=w+'px';canvas.style.height=h+'px';
+    const ctx=canvas.getContext('2d');ctx.clearRect(0,0,w,h);
     const activeStart=step.units[0];
     const activeEnd=Math.min(step.units[step.units.length-1]+1,markers.length-1);
     const GREEN='#3db06a';
     markers.filter(m=>m.page===pageIdx).forEach(m=>{
       const gi=markers.indexOf(m);
-      const isStart=gi===activeStart, isEnd=gi===activeEnd;
+      const isStart=gi===activeStart,isEnd=gi===activeEnd;
       if(!isStart&&!isEnd) return;
-      drawArrow(ctx, m.x*w, m.y*h, GREEN);
+      drawArrow(ctx,m.x*w,m.y*h,GREEN);
     });
   },[step.units,markers]);
 
@@ -3241,21 +3250,21 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
   );
 
   const photoBlock = (
-    <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex',overflow:'hidden'}}>
-      <div style={{position:'relative',flex:1,minWidth:0,minHeight:0,overflowY:'scroll',overflowX:'hidden',WebkitOverflowScrolling:'touch'}}>
+    <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex'}}>
+      <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
         <img ref={imgRef} src={pageImages[currentPage]}
           onLoad={()=>{setImgLoaded(true);requestAnimationFrame(()=>drawOverlay());}}
-          style={{width:'100%',height:'auto',display:'block',userSelect:'none',WebkitUserSelect:'none'}}
+          style={{width:'100%',height:'100%',objectFit:'contain',display:'block',userSelect:'none'}}
           draggable={false} />
-        <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,pointerEvents:'none'}} />
+        <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none'}} />
       </div>
       {showTwo&&rightPageS!==null&&(
-        <div style={{position:'relative',flex:1,minWidth:0,minHeight:0,borderLeft:`1px solid ${C.bord}`,overflowY:'scroll',overflowX:'hidden',WebkitOverflowScrolling:'touch'}}>
+        <div style={{position:'relative',flex:1,minWidth:0,borderLeft:`1px solid ${C.bord}`,overflow:'hidden'}}>
           <img ref={imgRef2S} src={pageImages[rightPageS]}
             onLoad={()=>{setImgLoaded2(true);requestAnimationFrame(()=>drawOverlay());}}
-            style={{width:'100%',height:'auto',display:'block',userSelect:'none',WebkitUserSelect:'none'}}
+            style={{width:'100%',height:'100%',objectFit:'contain',display:'block',userSelect:'none'}}
             draggable={false} />
-          <canvas ref={canvasRef2S} style={{position:'absolute',top:0,left:0,pointerEvents:'none'}} />
+          <canvas ref={canvasRef2S} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none'}} />
         </div>
       )}
     </div>
