@@ -444,7 +444,7 @@ export default function App() {
             } else if(sessionMode==='interleaved') {
               setInterleavedSpots(prev=>{
                 if(prev.length>=7) return prev;
-                return [...prev,{id:prev.length+1,page:pos.page,x:pos.x,y:pos.y,checks:0,bpm:80}];
+                return [...prev,{id:prev.length+1,page:pos.page,x:pos.x,y:pos.y,checks:0,bpm:null}];
               });
             } else {
               setTapPos(pos);
@@ -604,6 +604,7 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
   const [deleting,setDeleting]   = useState(false);
   const [locatePicker,setLocatePicker] = useState(null);
   const [locateMsg,setLocateMsg]       = useState(null); // {ok:bool, text:string}
+  const [loadingPdf,setLoadingPdf]     = useState(null); // piece title while loading
 
   // React to locate result coming back from score screen
   useEffect(()=>{
@@ -715,6 +716,7 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
     if(piece.file_type==='image'){
       onSelectRepertoire(piece,[piece.file_url]);
     } else {
+      setLoadingPdf(piece.title||'Loading…');
       try {
         const pdfjsLib = window['pdfjs-dist/build/pdf'];
         if(!pdfjsLib) throw new Error('PDF.js not loaded');
@@ -722,6 +724,7 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
         const pdf = await pdfjsLib.getDocument(piece.file_url).promise;
         const imgs=[];
         for(let p=1;p<=pdf.numPages;p++){
+          setLoadingPdf(`${piece.title||'Loading'} — page ${p} of ${pdf.numPages}`);
           const page=await pdf.getPage(p);
           const vp=page.getViewport({scale:2});
           const canvas=document.createElement('canvas');
@@ -729,8 +732,12 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
           await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
           imgs.push(canvas.toDataURL('image/png'));
         }
+        setLoadingPdf(null);
         onSelectRepertoire(piece,imgs);
-      } catch { onSelectRepertoire(piece,[piece.file_url]); }
+      } catch {
+        setLoadingPdf(null);
+        onSelectRepertoire(piece,[piece.file_url]);
+      }
     }
   };
 
@@ -756,6 +763,26 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
 
   return (
     <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
+
+      {/* PDF loading overlay */}
+      {loadingPdf && (
+        <div style={{position:'fixed',inset:0,zIndex:900,
+          background:'rgba(16,13,10,0.93)',
+          display:'flex',flexDirection:'column',
+          alignItems:'center',justifyContent:'center',gap:24}}>
+          <style>{`@keyframes pfn-spin{to{transform:rotate(360deg);}}`}</style>
+          <div style={{width:52,height:52,borderRadius:'50%',
+            border:`4px solid ${C.bord}`,borderTopColor:C.accent,
+            animation:'pfn-spin 0.9s linear infinite'}}/>
+          <div style={{textAlign:'center',maxWidth:300,padding:'0 20px'}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+              letterSpacing:'0.18em',color:C.accent,marginBottom:6}}>LOADING SCORE</div>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+              fontSize:'1rem',color:C.muted,lineHeight:1.5}}>{loadingPdf}</div>
+          </div>
+        </div>
+      )}
+
       <TopBar
         left={<span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',color:C.cream}}>{profile.name||profile.email}</span>}
         center="MY LIBRARY"
@@ -1057,38 +1084,113 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   );
 
   // ── Interleaved placement layout ─────────────────────────────────────
+  const [selectedSpotId, setSelectedSpotId] = useState(null);
+  const [placeMetroBpm, setPlaceMetroBpm]   = useState(80);
+  const [placeMetroOn,  setPlaceMetroOn]    = useState(false);
+  const placeMetro = useRef(new Metro());
+  useEffect(()=>()=>placeMetro.current.stop(),[]);
+  // Auto-select the most recently placed spot
+  useEffect(()=>{
+    if(interleavedSpots.length>0)
+      setSelectedSpotId(interleavedSpots[interleavedSpots.length-1].id);
+  },[interleavedSpots.length]);
+
   if(isInterleaved && !locateEx) {
-    const canStart = interleavedSpots.length >= 3;
+    const canStart    = interleavedSpots.length >= 3;
     const spotsOnPage = interleavedSpots.filter(s => s.page === currentPage);
+    const selSpot     = interleavedSpots.find(s=>s.id===selectedSpotId);
+    const alreadyLocked = selSpot?.bpm === placeMetroBpm;
+
+    const adjustBpm = delta => {
+      const next = Math.min(220, Math.max(30, placeMetroBpm + delta));
+      setPlaceMetroBpm(next);
+      placeMetro.current.setBpm(next);
+      if(placeMetroOn) placeMetro.current.start(next);
+    };
+    const toggleMetro = () => {
+      const next = !placeMetroOn;
+      setPlaceMetroOn(next);
+      if(next) placeMetro.current.start(placeMetroBpm);
+      else     placeMetro.current.stop();
+    };
+    const lockIn = () => {
+      if(!selectedSpotId) return;
+      onBpmChange(selectedSpotId, placeMetroBpm);
+    };
+
+    const bpmBtn = (label, delta) => (
+      <button onClick={()=>adjustBpm(delta)} style={{
+        background:'#2a231d',border:`1px solid ${C.bord2}`,color:C.cream,
+        width:36,height:36,cursor:'pointer',
+        fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
+        display:'flex',alignItems:'center',justifyContent:'center',
+        flexShrink:0,WebkitTapHighlightColor:'transparent',
+      }}>{label}</button>
+    );
+
     return (
       <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
         <TopBar
           left={<BackBtn onClick={onBack} />}
           center={piece?.title||'INTERLEAVED'}
-          right={<div style={{display:'flex',gap:4}}>{modeBtn('massed','MASSED')}{modeBtn('interleaved','INTERLEAVED')}</div>}
+          right={<div style={{display:'flex',gap:4}}>{modeBtn('massed','BLOCKED')}{modeBtn('interleaved','INTERLEAVED')}</div>}
         />
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+
+        {/* Metronome bar */}
+        <div style={{display:'flex',alignItems:'center',gap:8,
           padding:'8px 14px',flexShrink:0,
-          background:'rgba(74,158,255,0.08)',
-          borderBottom:'1px solid rgba(74,158,255,0.25)',gap:12}}>
+          background:C.panel,borderBottom:`1px solid ${C.bord}`}}>
+          {bpmBtn('−', -5)}
+          <span style={{fontFamily:"'Bebas Neue',sans-serif",
+            fontSize:'clamp(1.4rem,4vw,1.9rem)',letterSpacing:'0.06em',
+            color:placeMetroOn?C.accent:C.cream,lineHeight:1,
+            minWidth:90,textAlign:'center',flexShrink:0}}>♩ = {placeMetroBpm}</span>
+          {bpmBtn('+', 5)}
+          <button onClick={toggleMetro} style={{
+            background:placeMetroOn?C.accent:'#2a231d',
+            border:`2px solid ${placeMetroOn?C.accent:'#666'}`,
+            color:'white',width:40,height:40,cursor:'pointer',
+            fontSize:'1.1rem',display:'flex',alignItems:'center',justifyContent:'center',
+            flexShrink:0,WebkitTapHighlightColor:'transparent',
+          }}>{placeMetroOn?'⏸':'▶'}</button>
+          <button onClick={lockIn} disabled={!selectedSpotId} style={{
+            flex:1,padding:'8px 6px',
+            background:alreadyLocked?'rgba(61,176,106,0.18)':'#2a231d',
+            border:`1px solid ${alreadyLocked?'#3db06a':selectedSpotId?C.bord2:C.bord}`,
+            color:alreadyLocked?'#3db06a':selectedSpotId?C.cream:C.dim,
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.78rem',
+            letterSpacing:'0.08em',cursor:selectedSpotId?'pointer':'not-allowed',
+            WebkitTapHighlightColor:'transparent',textAlign:'center',lineHeight:1.3,
+          }}>
+            {alreadyLocked ? '✓ LOCKED' : selectedSpotId ? `LOCK IN →\nSPOT ${selectedSpotId}` : 'LOCK IN'}
+          </button>
+        </div>
+
+        {/* Spot count + start bar */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+          padding:'7px 14px',flexShrink:0,
+          background:'rgba(74,158,255,0.06)',
+          borderBottom:'1px solid rgba(74,158,255,0.2)',gap:10}}>
           <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-            fontSize:'1rem',color:C.cream}}>
+            fontSize:'0.95rem',color:C.cream}}>
             {interleavedSpots.length===0
-              ? 'Tap the score to place spots (3–7)'
+              ? 'Tap score to place spots (3–7)'
               : interleavedSpots.length<3
-              ? `${interleavedSpots.length} spot${interleavedSpots.length!==1?'s':''} placed — need at least 3`
-              : `${interleavedSpots.length} spot${interleavedSpots.length!==1?'s':''} placed — ready`}
+              ? `${interleavedSpots.length} spot${interleavedSpots.length!==1?'s':''} — need at least 3`
+              : `${interleavedSpots.length} spot${interleavedSpots.length!==1?'s':''} — tap a spot to select it`}
           </div>
           <button onClick={onStartSession} disabled={!canStart} style={{
             fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
-            letterSpacing:'0.1em',padding:'7px 18px',flexShrink:0,
+            letterSpacing:'0.1em',padding:'7px 14px',flexShrink:0,
             background:canStart?'#4a9eff':'#2a231d',
             color:canStart?'white':C.dim,
             border:`1px solid ${canStart?'#4a9eff':C.bord}`,
             cursor:canStart?'pointer':'not-allowed',
             WebkitTapHighlightColor:'transparent',
-          }}>START SESSION →</button>
+          }}>START →</button>
         </div>
+
+        {/* Page nav */}
         {totalPages>1 && (
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
             padding:'7px 14px',flexShrink:0,
@@ -1115,6 +1217,8 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 opacity:currentPage===totalPages-1?0.35:1}}>NEXT →</button>
           </div>
         )}
+
+        {/* Score */}
         <div style={{flex:'1 1 0',minHeight:0,overflowY:'auto',
           background:'#0a0805',WebkitOverflowScrolling:'touch'}}>
           <div style={{position:'relative',width:'100%'}}>
@@ -1124,7 +1228,11 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 userSelect:'none',WebkitUserSelect:'none',cursor:'crosshair'}}
               onContextMenu={e=>e.preventDefault()} draggable={false} />
             {spotsOnPage.map(spot=>(
-              <SpotBox key={spot.id} spot={spot} mode="placement" onRemove={onRemoveSpot} onBpmChange={onBpmChange} />
+              <SpotBox key={spot.id} spot={spot} mode="placement"
+                onRemove={onRemoveSpot}
+                isSelected={spot.id===selectedSpotId}
+                onSelect={id=>setSelectedSpotId(id)}
+              />
             ))}
           </div>
         </div>
@@ -1139,7 +1247,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         center={locateEx ? 'LOCATE EXERCISE' : (piece?.title||'SCORE')}
         right={locateEx ? null : (
           <div style={{display:'flex',gap:4}}>
-            {modeBtn('massed','MASSED')}
+            {modeBtn('massed','BLOCKED')}
             {modeBtn('interleaved','INTERLEAVED')}
           </div>
         )}
@@ -1241,49 +1349,60 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
 /* ═══════════════════════════════════════════════════════════════════════
    INTERLEAVED — SPOT BOX
 ═══════════════════════════════════════════════════════════════════════ */
-function SpotBox({ spot, mode, onRemove, onBpmChange, isCurrent }) {
-  const isDone   = spot.checks >= 5;
-  // Session: dim everything that isn't the current spot
-  const dimmed   = mode === 'session' && !isCurrent;
-  const border   = dimmed ? 'rgba(140,130,120,0.35)' : isDone ? '#3db06a' : '#4a9eff';
-  const bg       = dimmed ? 'rgba(30,28,26,0.55)' : isDone ? 'rgba(61,176,106,0.22)' : 'rgba(30,70,160,0.55)';
-  const opacity  = dimmed ? 0.38 : 1;
-  // Placement boxes are taller to fit the BPM row
-  const boxH     = mode === 'placement' ? 70 : 52;
-  const topOff   = boxH / 2;
+function SpotBox({ spot, mode, onRemove, isCurrent, isSelected, onSelect }) {
+  const isDone    = spot.checks >= 5;
+  const dimmed    = mode === 'session' && !isCurrent;
+  const selected  = mode === 'placement' && isSelected;
+  const border    = dimmed   ? 'rgba(140,130,120,0.3)'
+                  : selected ? '#7ec8ff'
+                  : isDone   ? '#3db06a'
+                  :            '#4a9eff';
+  const bg        = dimmed   ? 'rgba(30,28,26,0.55)'
+                  : isDone   ? 'rgba(61,176,106,0.22)'
+                  :            'rgba(30,70,160,0.55)';
+  const opacity   = dimmed ? 0.35 : 1;
+  const boxShadow = selected ? '0 0 0 2px rgba(126,200,255,0.45)' : 'none';
   return (
-    <div style={{
-      position:'absolute',
-      left:`calc(${spot.x*100}% - 36px)`,
-      top:`calc(${spot.y*100}% - ${topOff}px)`,
-      width:72, height:boxH,
-      border:`2px solid ${border}`,
-      background:bg,
-      borderRadius:5,
-      display:'flex', flexDirection:'column',
-      alignItems:'center', justifyContent:'space-between',
-      padding:'3px 5px 4px',
-      opacity,
-      transition:'opacity 0.2s, border-color 0.2s',
-      pointerEvents: mode==='placement' ? 'auto' : 'none',
-      userSelect:'none', WebkitTapHighlightColor:'transparent',
-      zIndex:5,
-    }}>
-      {/* Row 1: number + remove */}
+    <div
+      onClick={mode==='placement' ? e=>{e.stopPropagation();onSelect&&onSelect(spot.id);} : undefined}
+      style={{
+        position:'absolute',
+        left:`calc(${spot.x*100}% - 36px)`,
+        top:`calc(${spot.y*100}% - 26px)`,
+        width:72, height:52,
+        border:`2px solid ${border}`,
+        background:bg,
+        borderRadius:5,
+        boxShadow,
+        display:'flex', flexDirection:'column',
+        alignItems:'center', justifyContent:'space-between',
+        padding:'3px 5px 4px',
+        opacity,
+        transition:'opacity 0.2s, border-color 0.2s, box-shadow 0.2s',
+        pointerEvents: mode==='placement' ? 'auto' : 'none',
+        cursor: mode==='placement' ? 'pointer' : 'default',
+        userSelect:'none', WebkitTapHighlightColor:'transparent',
+        zIndex:5,
+      }}>
       <div style={{display:'flex',width:'100%',justifyContent:'space-between',alignItems:'flex-start'}}>
         <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:15,lineHeight:1,
           color:isDone?'#3db06a':'#fff',letterSpacing:'0.05em'}}>{spot.id}</span>
-        {mode==='placement' && (
-          <button onClick={e=>{e.stopPropagation();onRemove(spot.id);}} style={{
-            background:'rgba(255,255,255,0.18)',border:'none',
-            color:'rgba(255,255,255,0.85)',width:14,height:14,
-            borderRadius:'50%',cursor:'pointer',fontSize:9,
-            display:'flex',alignItems:'center',justifyContent:'center',
-            padding:0,lineHeight:1,flexShrink:0,
-          }}>✕</button>
-        )}
+        <div style={{display:'flex',alignItems:'center',gap:2}}>
+          {/* Tiny tempo-locked indicator */}
+          {spot.bpm && (
+            <span style={{fontSize:9,color:'rgba(126,200,255,0.8)',lineHeight:1}}>♩</span>
+          )}
+          {mode==='placement' && (
+            <button onClick={e=>{e.stopPropagation();onRemove(spot.id);}} style={{
+              background:'rgba(255,255,255,0.18)',border:'none',
+              color:'rgba(255,255,255,0.85)',width:14,height:14,
+              borderRadius:'50%',cursor:'pointer',fontSize:9,
+              display:'flex',alignItems:'center',justifyContent:'center',
+              padding:0,lineHeight:1,
+            }}>✕</button>
+          )}
+        </div>
       </div>
-      {/* Row 2: check dots */}
       <div style={{display:'flex',gap:3,alignItems:'center'}}>
         {[0,1,2,3,4].map(i=>(
           <div key={i} style={{
@@ -1294,21 +1413,6 @@ function SpotBox({ spot, mode, onRemove, onBpmChange, isCurrent }) {
           }}/>
         ))}
       </div>
-      {/* Row 3: BPM stepper — placement only */}
-      {mode==='placement' && (
-        <div style={{display:'flex',alignItems:'center',gap:2,marginTop:1}}>
-          <button onClick={e=>{e.stopPropagation();onBpmChange&&onBpmChange(spot.id,Math.max(30,(spot.bpm||80)-5));}}
-            style={{background:'rgba(255,255,255,0.12)',border:'none',color:'#fff',
-              width:14,height:14,cursor:'pointer',fontSize:10,lineHeight:1,
-              display:'flex',alignItems:'center',justifyContent:'center',padding:0,borderRadius:2}}>−</button>
-          <span style={{fontFamily:"'Inconsolata',monospace",fontSize:9,color:'rgba(255,255,255,0.8)',
-            minWidth:22,textAlign:'center',letterSpacing:'0.02em'}}>♩{spot.bpm||80}</span>
-          <button onClick={e=>{e.stopPropagation();onBpmChange&&onBpmChange(spot.id,Math.min(220,(spot.bpm||80)+5));}}
-            style={{background:'rgba(255,255,255,0.12)',border:'none',color:'#fff',
-              width:14,height:14,cursor:'pointer',fontSize:10,lineHeight:1,
-              display:'flex',alignItems:'center',justifyContent:'center',padding:0,borderRadius:2}}>+</button>
-        </div>
-      )}
     </div>
   );
 }
@@ -1328,17 +1432,25 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
   const currentSpotIdRef  = useRef(null);
   const currentPageRef    = useRef(0);
   const metro             = useRef(new Metro());
-  const [metroOn, setMetroOn] = useState(false);
+  const [metroOn,  setMetroOn]  = useState(false);
+  const [metroBpm, setMetroBpm] = useState(80);
   useEffect(()=>{ currentSpotIdRef.current = currentSpotId; },[currentSpotId]);
   useEffect(()=>{ currentPageRef.current   = currentPage;   },[currentPage]);
-  // Update metro BPM whenever the current spot changes
+  // When spot changes: if it has a locked BPM, auto-load it; otherwise keep current
   useEffect(()=>{
     if(!currentSpotId) return;
     const spot = spots.find(s=>s.id===currentSpotId);
-    const bpm  = spot?.bpm || 80;
-    metro.current.setBpm(bpm);
-    if(metroOn) metro.current.start(bpm);
+    if(spot?.bpm) {
+      setMetroBpm(spot.bpm);
+      metro.current.setBpm(spot.bpm);
+      if(metroOn) metro.current.start(spot.bpm);
+    }
   },[currentSpotId]);
+  // Keep metro in sync when metroBpm changes
+  useEffect(()=>{
+    metro.current.setBpm(metroBpm);
+    if(metroOn) metro.current.start(metroBpm);
+  },[metroBpm]);
   // Stop metro on unmount
   useEffect(()=>()=>metro.current.stop(),[]);
 
@@ -1448,19 +1560,35 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
       </div>
       {/* Metronome bar */}
       {(()=>{
-        const bpm=(spots.find(s=>s.id===currentSpotId)?.bpm)||80;
+        const curSpot = spots.find(s=>s.id===currentSpotId);
+        const alreadyLocked = curSpot?.bpm === metroBpm;
+        const adjBpm = delta => {
+          const next = Math.min(220, Math.max(30, metroBpm + delta));
+          setMetroBpm(next);
+        };
+        const bpmBtn = (label, delta) => (
+          <button onClick={()=>adjBpm(delta)} style={{
+            background:'#2a231d',border:`1px solid ${C.bord2}`,color:C.cream,
+            width:36,height:36,cursor:'pointer',
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            flexShrink:0,WebkitTapHighlightColor:'transparent',
+          }}>{label}</button>
+        );
         return (
-          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:16,
+          <div style={{display:'flex',alignItems:'center',gap:8,
             padding:'8px 14px',flexShrink:0,
             background:C.panel,borderBottom:`1px solid ${C.bord}`}}>
-            <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.5rem',
-              letterSpacing:'0.06em',color:metroOn?C.accent:C.cream,lineHeight:1}}>
-              ♩ = {bpm}
-            </span>
+            {bpmBtn('−', -5)}
+            <span style={{fontFamily:"'Bebas Neue',sans-serif",
+              fontSize:'clamp(1.4rem,4vw,1.9rem)',letterSpacing:'0.06em',
+              color:metroOn?C.accent:C.cream,lineHeight:1,
+              minWidth:90,textAlign:'center',flexShrink:0}}>♩ = {metroBpm}</span>
+            {bpmBtn('+', 5)}
             <button onClick={()=>{
               const next=!metroOn;
               setMetroOn(next);
-              if(next) metro.current.start(bpm); else metro.current.stop();
+              if(next) metro.current.start(metroBpm); else metro.current.stop();
             }} style={{
               background:metroOn?C.accent:'#2a231d',
               border:`2px solid ${metroOn?C.accent:'#666'}`,
@@ -1468,6 +1596,20 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
               fontSize:'1.1rem',display:'flex',alignItems:'center',justifyContent:'center',
               flexShrink:0,WebkitTapHighlightColor:'transparent',
             }}>{metroOn?'⏸':'▶'}</button>
+            <button onClick={()=>{
+              if(!currentSpotId) return;
+              setSpots(prev=>prev.map(s=>s.id===currentSpotId?{...s,bpm:metroBpm}:s));
+            }} style={{
+              flex:1,padding:'8px 6px',
+              background:alreadyLocked?'rgba(61,176,106,0.18)':'#2a231d',
+              border:`1px solid ${alreadyLocked?'#3db06a':C.bord2}`,
+              color:alreadyLocked?'#3db06a':C.cream,
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.78rem',
+              letterSpacing:'0.08em',cursor:'pointer',
+              WebkitTapHighlightColor:'transparent',textAlign:'center',lineHeight:1.3,
+            }}>
+              {alreadyLocked ? '✓ LOCKED' : `LOCK IN →\nSPOT ${currentSpotId||'—'}`}
+            </button>
           </div>
         );
       })()}
@@ -3212,7 +3354,12 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
     <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
       <TopBar
         left={<BackBtn onClick={onBack} />}
-        center={piece?.title||'MARK UNITS'}
+        center={
+          <div style={{textAlign:'center',lineHeight:1.25}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',letterSpacing:'0.12em',color:C.cream}}>{piece?.title||'MARK UNITS'}</div>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',fontSize:'0.82rem',color:C.muted,marginTop:1}}>Practice by the beat? By the measure?</div>
+          </div>
+        }
         right={
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             <Btn onClick={()=>setMarkers([])} disabled={totalMarkers===0}
