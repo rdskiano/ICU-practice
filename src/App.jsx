@@ -2651,32 +2651,40 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
                 color:C.muted,pointerEvents:'none',fontSize:'0.65rem'}}>&#9662;</span>
             </div>
           </div>
-          {/* Name + Generate + Play inline — appear once notes are entered */}
-          {activeGroup && instrSelected && selNotes.length>0 && (
+          {/* Name + Generate + Play — always visible once instrument selected, active once notes entered */}
+          {activeGroup && instrSelected && (
             <div style={{flex:1,minWidth:200,display:'flex',flexDirection:'column',gap:6}}>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.78rem',
                 letterSpacing:'0.18em',color:C.muted}}>EXERCISE NAME</div>
               <input type="text" value={docName} onChange={e=>setDocName(e.target.value)}
                 placeholder="Required to generate"
+                disabled={selNotes.length===0}
                 style={{fontSize:'0.85rem',padding:'7px 10px',background:'#1a1410',
-                  border:`1px solid ${docName.trim()?C.bord:'#6a3a1a'}`,color:C.cream,
-                  fontFamily:"'Inconsolata',monospace",outline:'none',width:'100%',boxSizing:'border-box'}} />
+                  border:`1px solid ${docName.trim()?C.bord:selNotes.length>0?'#6a3a1a':C.bord}`,
+                  color:selNotes.length>0?C.cream:'#444',
+                  fontFamily:"'Inconsolata',monospace",outline:'none',
+                  width:'100%',boxSizing:'border-box',
+                  opacity:selNotes.length===0?0.4:1}} />
               <div style={{display:'flex',gap:6}}>
                 <button onClick={generate} disabled={!canGenerate||!docName.trim()} style={{
-                  flex:2,padding:'8px 4px',background:(canGenerate&&docName.trim())?C.accent:'#2a231d',
+                  flex:2,padding:'8px 4px',
+                  background:(canGenerate&&docName.trim())?C.accent:'#2a231d',
                   border:`1px solid ${(canGenerate&&docName.trim())?C.accent:C.bord}`,
                   color:(canGenerate&&docName.trim())?'white':C.dim,
                   fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
                   letterSpacing:'0.08em',cursor:(canGenerate&&docName.trim())?'pointer':'not-allowed',
                   WebkitTapHighlightColor:'transparent',
+                  opacity:selNotes.length===0?0.35:1,
                 }}>GENERATE</button>
                 <button onClick={playPassage} disabled={!selNotes.length} style={{
                   flex:1,padding:'8px 4px',
                   background:passagePlaying?'#2a1010':'#2a231d',
                   border:`1px solid ${passagePlaying?'#e53535':C.bord}`,
-                  color:passagePlaying?'#e53535':C.cream,
+                  color:passagePlaying?'#e53535':selNotes.length?C.cream:'#444',
                   fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
-                  cursor:'pointer',WebkitTapHighlightColor:'transparent',transition:'all 0.12s',
+                  cursor:selNotes.length?'pointer':'not-allowed',
+                  WebkitTapHighlightColor:'transparent',transition:'all 0.12s',
+                  opacity:selNotes.length===0?0.35:1,
                 }}>{passagePlaying?'\u25A0 STOP':'\u25B6 PLAY'}</button>
               </div>
               {saveMsg && <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',
