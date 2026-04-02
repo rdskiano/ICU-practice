@@ -524,9 +524,8 @@ function g2s(n){return{3:"Three-Note Rhythm Patterns",4:"Four-Note Rhythm Patter
    ROOT APP
 ═══════════════════════════════════════════════════════════════════════ */
 function RootContainer({children}) {
-  const h = useWindowHeight();
   return (
-    <div style={{height:h,background:C.ink,color:C.cream,
+    <div style={{height:'100dvh',background:C.ink,color:C.cream,
       display:'flex',flexDirection:'column',overflow:'hidden'}}>
       {children}
     </div>
