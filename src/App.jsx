@@ -410,6 +410,7 @@ export default function App() {
             const filtered=prev.filter(s=>s.id!==id);
             return filtered.map((s,i)=>({...s,id:i+1}));
           })}
+          onBpmChange={(id,bpm)=>setInterleavedSpots(prev=>prev.map(s=>s.id===id?{...s,bpm}:s))}
           onStartSession={()=>setScreen('interleaved-session')}
           locateEx={locateEx}
           onBack={()=>{ setLocateEx(null); setInterleavedSpots([]); setScreen('library'); }}
@@ -443,7 +444,7 @@ export default function App() {
             } else if(sessionMode==='interleaved') {
               setInterleavedSpots(prev=>{
                 if(prev.length>=7) return prev;
-                return [...prev,{id:prev.length+1,page:pos.page,x:pos.x,y:pos.y,checks:0}];
+                return [...prev,{id:prev.length+1,page:pos.page,x:pos.x,y:pos.y,checks:0,bpm:80}];
               });
             } else {
               setTapPos(pos);
@@ -1025,7 +1026,7 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
    SCORE VIEW — home base for a repertoire item
 ═══════════════════════════════════════════════════════════════════════ */
 function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
-  sessionMode, setSessionMode, interleavedSpots, onRemoveSpot, onStartSession,
+  sessionMode, setSessionMode, interleavedSpots, onRemoveSpot, onBpmChange, onStartSession,
   locateEx, onBack, onTapPassage }) {
 
   const land = useOrientation();
@@ -1123,7 +1124,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 userSelect:'none',WebkitUserSelect:'none',cursor:'crosshair'}}
               onContextMenu={e=>e.preventDefault()} draggable={false} />
             {spotsOnPage.map(spot=>(
-              <SpotBox key={spot.id} spot={spot} mode="placement" onRemove={onRemoveSpot} />
+              <SpotBox key={spot.id} spot={spot} mode="placement" onRemove={onRemoveSpot} onBpmChange={onBpmChange} />
             ))}
           </div>
         </div>
@@ -1240,26 +1241,35 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
 /* ═══════════════════════════════════════════════════════════════════════
    INTERLEAVED — SPOT BOX
 ═══════════════════════════════════════════════════════════════════════ */
-function SpotBox({ spot, mode, onRemove }) {
-  const isDone = spot.checks >= 5;
-  const border = isDone ? '#3db06a' : '#4a9eff';
-  const bg     = isDone ? 'rgba(61,176,106,0.22)' : 'rgba(30,70,160,0.55)';
+function SpotBox({ spot, mode, onRemove, onBpmChange, isCurrent }) {
+  const isDone   = spot.checks >= 5;
+  // Session: dim everything that isn't the current spot
+  const dimmed   = mode === 'session' && !isCurrent;
+  const border   = dimmed ? 'rgba(140,130,120,0.35)' : isDone ? '#3db06a' : '#4a9eff';
+  const bg       = dimmed ? 'rgba(30,28,26,0.55)' : isDone ? 'rgba(61,176,106,0.22)' : 'rgba(30,70,160,0.55)';
+  const opacity  = dimmed ? 0.38 : 1;
+  // Placement boxes are taller to fit the BPM row
+  const boxH     = mode === 'placement' ? 70 : 52;
+  const topOff   = boxH / 2;
   return (
     <div style={{
       position:'absolute',
       left:`calc(${spot.x*100}% - 36px)`,
-      top:`calc(${spot.y*100}% - 26px)`,
-      width:72, height:52,
+      top:`calc(${spot.y*100}% - ${topOff}px)`,
+      width:72, height:boxH,
       border:`2px solid ${border}`,
       background:bg,
       borderRadius:5,
       display:'flex', flexDirection:'column',
       alignItems:'center', justifyContent:'space-between',
       padding:'3px 5px 4px',
+      opacity,
+      transition:'opacity 0.2s, border-color 0.2s',
       pointerEvents: mode==='placement' ? 'auto' : 'none',
       userSelect:'none', WebkitTapHighlightColor:'transparent',
       zIndex:5,
     }}>
+      {/* Row 1: number + remove */}
       <div style={{display:'flex',width:'100%',justifyContent:'space-between',alignItems:'flex-start'}}>
         <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:15,lineHeight:1,
           color:isDone?'#3db06a':'#fff',letterSpacing:'0.05em'}}>{spot.id}</span>
@@ -1273,6 +1283,7 @@ function SpotBox({ spot, mode, onRemove }) {
           }}>✕</button>
         )}
       </div>
+      {/* Row 2: check dots */}
       <div style={{display:'flex',gap:3,alignItems:'center'}}>
         {[0,1,2,3,4].map(i=>(
           <div key={i} style={{
@@ -1283,6 +1294,21 @@ function SpotBox({ spot, mode, onRemove }) {
           }}/>
         ))}
       </div>
+      {/* Row 3: BPM stepper — placement only */}
+      {mode==='placement' && (
+        <div style={{display:'flex',alignItems:'center',gap:2,marginTop:1}}>
+          <button onClick={e=>{e.stopPropagation();onBpmChange&&onBpmChange(spot.id,Math.max(30,(spot.bpm||80)-5));}}
+            style={{background:'rgba(255,255,255,0.12)',border:'none',color:'#fff',
+              width:14,height:14,cursor:'pointer',fontSize:10,lineHeight:1,
+              display:'flex',alignItems:'center',justifyContent:'center',padding:0,borderRadius:2}}>−</button>
+          <span style={{fontFamily:"'Inconsolata',monospace",fontSize:9,color:'rgba(255,255,255,0.8)',
+            minWidth:22,textAlign:'center',letterSpacing:'0.02em'}}>♩{spot.bpm||80}</span>
+          <button onClick={e=>{e.stopPropagation();onBpmChange&&onBpmChange(spot.id,Math.min(220,(spot.bpm||80)+5));}}
+            style={{background:'rgba(255,255,255,0.12)',border:'none',color:'#fff',
+              width:14,height:14,cursor:'pointer',fontSize:10,lineHeight:1,
+              display:'flex',alignItems:'center',justifyContent:'center',padding:0,borderRadius:2}}>+</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1301,8 +1327,20 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
   const imgRef          = useRef();
   const currentSpotIdRef  = useRef(null);
   const currentPageRef    = useRef(0);
+  const metro             = useRef(new Metro());
+  const [metroOn, setMetroOn] = useState(false);
   useEffect(()=>{ currentSpotIdRef.current = currentSpotId; },[currentSpotId]);
   useEffect(()=>{ currentPageRef.current   = currentPage;   },[currentPage]);
+  // Update metro BPM whenever the current spot changes
+  useEffect(()=>{
+    if(!currentSpotId) return;
+    const spot = spots.find(s=>s.id===currentSpotId);
+    const bpm  = spot?.bpm || 80;
+    metro.current.setBpm(bpm);
+    if(metroOn) metro.current.start(bpm);
+  },[currentSpotId]);
+  // Stop metro on unmount
+  useEffect(()=>()=>metro.current.stop(),[]);
 
   const shuffle = arr => {
     const a=[...arr];
@@ -1408,6 +1446,32 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
           display:'flex',alignItems:'center',justifyContent:'center',gap:10,
         }}>✓ GOT IT</button>
       </div>
+      {/* Metronome bar */}
+      {(()=>{
+        const bpm=(spots.find(s=>s.id===currentSpotId)?.bpm)||80;
+        return (
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:16,
+            padding:'8px 14px',flexShrink:0,
+            background:C.panel,borderBottom:`1px solid ${C.bord}`}}>
+            <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.5rem',
+              letterSpacing:'0.06em',color:metroOn?C.accent:C.cream,lineHeight:1}}>
+              ♩ = {bpm}
+            </span>
+            <button onClick={()=>{
+              const next=!metroOn;
+              setMetroOn(next);
+              if(next) metro.current.start(bpm); else metro.current.stop();
+            }} style={{
+              background:metroOn?C.accent:'#2a231d',
+              border:`2px solid ${metroOn?C.accent:'#666'}`,
+              color:'white',width:40,height:40,cursor:'pointer',
+              fontSize:'1.1rem',display:'flex',alignItems:'center',justifyContent:'center',
+              flexShrink:0,WebkitTapHighlightColor:'transparent',
+            }}>{metroOn?'⏸':'▶'}</button>
+          </div>
+        );
+      })()}
+
       {totalPages>1 && (
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
           padding:'7px 14px',flexShrink:0,
@@ -1461,7 +1525,7 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
             }}
           />
           {spotsOnPage.map(spot=>(
-            <SpotBox key={spot.id} spot={spot} mode="session" />
+            <SpotBox key={spot.id} spot={spot} mode="session" isCurrent={spot.id===currentSpotId} />
           ))}
           {spotsOnPage.filter(s=>s.id===currentSpotId).map(spot=>(
             <div key={'ring'+spot.id} style={{
