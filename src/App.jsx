@@ -1201,6 +1201,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const totalPages = pageImages.length;
   const showTwo = land && totalPages > 1;
   const rightPage = currentPage + 1 < totalPages ? currentPage + 1 : null;
+  const [showHint, setShowHint] = useState(true);
 
   const handleTap = e => {
     const img = e.currentTarget;
@@ -1235,45 +1236,75 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         )}
       />
 
-      {/* Instruction bar */}
-      <div style={{padding:'6px 16px',flexShrink:0,borderBottom:`1px solid ${C.bord}`,
-        display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,
-        background: locateEx ? 'rgba(154,112,16,0.15)' : 'transparent'}}>
-        {locateEx ? (
-          <div style={{display:'flex',alignItems:'center',gap:10,flex:1}}>
-            <span style={{fontSize:'1.1rem'}}>📍</span>
-            <div>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
-                letterSpacing:'0.15em',color:C.gold}}>
-                TAP WHERE THIS PASSAGE LIVES
-              </div>
-              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-                fontSize:'0.85rem',color:C.muted,marginTop:1}}>
-                {locateEx.doc_name||'Untitled exercise'}
-              </div>
-            </div>
+      {/* Locate mode banner — only shown when locating an exercise */}
+      {locateEx && (
+        <div style={{padding:'8px 16px',flexShrink:0,borderBottom:`1px solid ${C.bord}`,
+          background:'rgba(154,112,16,0.18)',display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:'1.1rem'}}>📍</span>
+          <div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+              letterSpacing:'0.15em',color:C.gold}}>TAP WHERE THIS PASSAGE LIVES</div>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+              fontSize:'0.85rem',color:C.muted}}>{locateEx.doc_name||'Untitled exercise'}</div>
           </div>
-        ) : (
-          <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-            fontSize:16,color:C.cream}}>
-            Tap a passage to begin working
-          </div>
-        )}
-        {!showTwo && totalPages>1 && (
-          <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
-            <Btn onClick={()=>setCurrentPage(p=>Math.max(0,p-1))}
-              disabled={currentPage===0} style={{padding:'4px 12px',fontSize:'0.8rem'}}>← PAGE</Btn>
-            <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream}}>
-              {currentPage+1}/{totalPages}
-            </span>
-            <Btn onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))}
-              disabled={currentPage===totalPages-1} style={{padding:'4px 12px',fontSize:'0.8rem'}}>PAGE →</Btn>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Score */}
-      <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex'}}>
+      {/* Score — full remaining height, nav arrows and hint float over it */}
+      <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex',position:'relative'}}>
+
+        {/* Floating hint toast — dismissible, only on first view */}
+        {showHint && !locateEx && (
+          <div onClick={()=>setShowHint(false)} style={{
+            position:'absolute',top:16,left:'50%',transform:'translateX(-50%)',
+            zIndex:20,background:'rgba(26,22,18,0.92)',border:`1px solid ${C.bord}`,
+            borderRadius:6,padding:'8px 16px 8px 14px',
+            display:'flex',alignItems:'center',gap:10,
+            boxShadow:'0 4px 20px rgba(0,0,0,0.5)',
+            WebkitTapHighlightColor:'transparent',cursor:'pointer',
+            whiteSpace:'nowrap',
+          }}>
+            <span style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+              fontSize:'1rem',color:C.cream}}>Tap a passage to begin working</span>
+            <span style={{color:C.muted,fontSize:'0.85rem'}}>✕</span>
+          </div>
+        )}
+
+        {/* Left page arrow */}
+        {!showTwo && totalPages>1 && currentPage>0 && (
+          <button onClick={()=>setCurrentPage(p=>p-1)}
+            style={{
+              position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',
+              zIndex:10,background:'rgba(26,22,18,0.7)',border:'none',
+              color:C.cream,fontSize:'1.8rem',padding:'16px 10px',
+              cursor:'pointer',WebkitTapHighlightColor:'transparent',
+              borderRadius:'0 4px 4px 0',
+            }}>‹</button>
+        )}
+
+        {/* Right page arrow */}
+        {!showTwo && totalPages>1 && currentPage<totalPages-1 && (
+          <button onClick={()=>setCurrentPage(p=>p+1)}
+            style={{
+              position:'absolute',right:0,top:'50%',transform:'translateY(-50%)',
+              zIndex:10,background:'rgba(26,22,18,0.7)',border:'none',
+              color:C.cream,fontSize:'1.8rem',padding:'16px 10px',
+              cursor:'pointer',WebkitTapHighlightColor:'transparent',
+              borderRadius:'4px 0 0 4px',
+            }}>›</button>
+        )}
+
+        {/* Page indicator — floating bottom center */}
+        {!showTwo && totalPages>1 && (
+          <div style={{
+            position:'absolute',bottom:12,left:'50%',transform:'translateX(-50%)',
+            zIndex:10,background:'rgba(26,22,18,0.8)',
+            padding:'4px 12px',borderRadius:12,
+            fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream,
+            pointerEvents:'none',
+          }}>{currentPage+1} / {totalPages}</div>
+        )}
+
         <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
           <img data-page={currentPage} src={pageImages[currentPage]}
             onClick={handleTap}
