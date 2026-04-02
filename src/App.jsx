@@ -3275,44 +3275,7 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
   );
 
   const photoBlock = (
-    <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex',position:'relative'}}>
-
-      {/* Floating NEXT PHASE — left side */}
-      <button onClick={()=>setIdx(nextPhaseIdx)} disabled={!hasNextPhase}
-        style={{
-          position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',
-          zIndex:10,
-          background:hasNextPhase?'rgba(42,35,29,0.92)':'rgba(20,16,12,0.5)',
-          border:'none',borderRadius:'0 6px 6px 0',
-          color:hasNextPhase?C.cream:'#444',
-          padding:'18px 10px',cursor:hasNextPhase?'pointer':'default',
-          display:'flex',flexDirection:'column',alignItems:'center',gap:2,
-          WebkitTapHighlightColor:'transparent',
-        }}>
-        <span style={{fontSize:'1rem'}}>«</span>
-        {['N','E','X','T','','P','H','A','S','E'].map((ch,i)=>(
-          <span key={i} style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',letterSpacing:'0.05em',lineHeight:ch?1:0.4}}>{ch}</span>
-        ))}
-      </button>
-
-      {/* Floating NEXT STEP — right side */}
-      <button onClick={()=>setIdx(i=>Math.min(steps.length-1,i+1))} disabled={idx>=steps.length-1}
-        style={{
-          position:'absolute',right:0,top:'50%',transform:'translateY(-50%)',
-          zIndex:10,
-          background:idx<steps.length-1?'rgba(139,58,26,0.92)':'rgba(20,16,12,0.5)',
-          border:'none',borderRadius:'6px 0 0 6px',
-          color:idx<steps.length-1?'white':'#444',
-          padding:'18px 10px',cursor:idx<steps.length-1?'pointer':'default',
-          display:'flex',flexDirection:'column',alignItems:'center',gap:2,
-          WebkitTapHighlightColor:'transparent',
-        }}>
-        <span style={{fontSize:'1rem'}}>»</span>
-        {['N','E','X','T','','S','T','E','P'].map((ch,i)=>(
-          <span key={i} style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',letterSpacing:'0.05em',lineHeight:ch?1:0.4}}>{ch}</span>
-        ))}
-      </button>
-
+    <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex'}}>
       <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
         <img ref={imgRef} src={pageImages[currentPage]}
           onLoad={()=>{setImgLoaded(true);requestAnimationFrame(()=>drawOverlay());}}
@@ -3334,21 +3297,48 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
 
   const topBarContent = (compact) => (
     <div style={{flexShrink:0,borderBottom:`2px solid ${C.accent}`,background:C.ink}}>
-      <div style={{display:'flex',alignItems:'center',gap:10,padding:compact?'3px 12px':'5px 12px'}}>
-        <button onClick={onBack} style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,padding:'6px 14px',cursor:'pointer',fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',letterSpacing:'0.1em',flexShrink:0}}>← EXIT</button>
-        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:12}}>
+      <div style={{display:'flex',alignItems:'center',gap:6,padding:compact?'3px 8px':'5px 8px'}}>
+        <button onClick={onBack} style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,padding:'6px 10px',cursor:'pointer',fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',letterSpacing:'0.1em',flexShrink:0}}>← EXIT</button>
+
+        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+          {/* NEXT PHASE — left of metronome */}
+          <button onClick={()=>setIdx(nextPhaseIdx)} disabled={!hasNextPhase} style={{
+            background:hasNextPhase?C.panel:'transparent',
+            border:`1px solid ${hasNextPhase?C.bord2:'#333'}`,
+            color:hasNextPhase?C.cream:'#444',
+            padding:compact?'5px 8px':'6px 10px',
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?'0.7rem':'0.8rem',
+            letterSpacing:'0.08em',cursor:hasNextPhase?'pointer':'default',
+            flexShrink:0,WebkitTapHighlightColor:'transparent',lineHeight:1.2,
+          }}>« NEXT<br/>PHASE</button>
+
+          {/* Tempo display */}
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?'clamp(1.4rem,4vw,2rem)':'clamp(1.8rem,7vw,2.6rem)',color:atGoal?C.accent:C.cream,lineHeight:1}}>
             ♩ = {step.tempo}
             {pastGoal&&<span style={{fontSize:'0.4em',color:C.muted,marginLeft:8,verticalAlign:'middle'}}>PAST GOAL</span>}
           </div>
-          <button onClick={()=>setMetroOn(m=>!m)} style={{background:metroOn?C.accent:'#2a231d',border:`2px solid ${metroOn?C.accent:'#666'}`,color:'white',width:compact?38:46,height:compact?38:46,cursor:'pointer',fontSize:compact?'1.1rem':'1.3rem',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+
+          {/* Metronome */}
+          <button onClick={()=>setMetroOn(m=>!m)} style={{background:metroOn?C.accent:'#2a231d',border:`2px solid ${metroOn?C.accent:'#666'}`,color:'white',width:compact?36:44,height:compact?36:44,cursor:'pointer',fontSize:compact?'1rem':'1.2rem',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
             {metroOn?'⏸':'▶'}
           </button>
+
+          {/* NEXT STEP — right of metronome */}
+          <button onClick={()=>setIdx(i=>Math.min(steps.length-1,i+1))} disabled={idx>=steps.length-1} style={{
+            background:idx<steps.length-1?C.accent:'transparent',
+            border:`1px solid ${idx<steps.length-1?C.accent:'#333'}`,
+            color:idx<steps.length-1?'white':'#444',
+            padding:compact?'5px 8px':'6px 10px',
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?'0.7rem':'0.8rem',
+            letterSpacing:'0.08em',cursor:idx<steps.length-1?'pointer':'default',
+            flexShrink:0,WebkitTapHighlightColor:'transparent',lineHeight:1.2,
+          }}>NEXT »<br/>STEP</button>
         </div>
+
         <button onClick={handleDone} style={{
           background:C.accent,border:`1px solid ${C.accent}`,
-          color:'white',padding:'6px 14px',cursor:'pointer',
-          fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
+          color:'white',padding:'6px 10px',cursor:'pointer',
+          fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
           letterSpacing:'0.1em',flexShrink:0}}>DONE ✓</button>
       </div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:compact?'2px 12px 2px':'3px 12px 4px',fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',fontSize:compact?12:15,color:C.cream}}>
