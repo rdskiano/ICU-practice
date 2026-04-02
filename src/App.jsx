@@ -1088,7 +1088,33 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             WebkitTapHighlightColor:'transparent',
           }}>START SESSION →</button>
         </div>
-        <div style={{flex:'1 1 0',minHeight:0,overflowY:'auto',overflowX:'hidden',
+        {totalPages>1 && (
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+            padding:'7px 14px',flexShrink:0,
+            background:C.ink,borderBottom:`1px solid ${C.bord}`}}>
+            <button onClick={()=>setCurrentPage(p=>Math.max(0,p-1))} disabled={currentPage===0}
+              style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,
+                padding:'5px 14px',fontSize:'0.85rem',letterSpacing:'0.06em',
+                fontFamily:"'Bebas Neue',sans-serif",cursor:currentPage===0?'default':'pointer',
+                opacity:currentPage===0?0.35:1}}>← PREV</button>
+            <div style={{textAlign:'center'}}>
+              <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream}}>
+                page {currentPage+1} of {totalPages}
+              </div>
+              {(()=>{const n=interleavedSpots.filter(s=>s.page===currentPage).length;
+                return n>0?<div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.68rem',
+                  color:'#4a9eff',marginTop:1}}>{n} spot{n!==1?'s':''} here</div>:null;})()}
+            </div>
+            <button onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))}
+              disabled={currentPage===totalPages-1}
+              style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,
+                padding:'5px 14px',fontSize:'0.85rem',letterSpacing:'0.06em',
+                fontFamily:"'Bebas Neue',sans-serif",
+                cursor:currentPage===totalPages-1?'default':'pointer',
+                opacity:currentPage===totalPages-1?0.35:1}}>NEXT →</button>
+          </div>
+        )}
+        <div style={{flex:'1 1 0',minHeight:0,overflowY:'auto',
           background:'#0a0805',WebkitOverflowScrolling:'touch'}}>
           <div style={{position:'relative',width:'100%'}}>
             <img data-page={currentPage} src={pageImages[currentPage]}
@@ -1100,22 +1126,6 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               <SpotBox key={spot.id} spot={spot} mode="placement" onRemove={onRemoveSpot} />
             ))}
           </div>
-          {totalPages>1 && (
-            <div style={{position:'sticky',bottom:0,zIndex:10,display:'flex',
-              alignItems:'center',justifyContent:'space-between',
-              padding:'8px 14px',background:'rgba(26,22,18,0.97)',
-              borderTop:`1px solid ${C.bord}`}}>
-              <button onClick={()=>setCurrentPage(p=>Math.max(0,p-1))} disabled={currentPage===0}
-                style={{background:'none',border:'none',color:C.cream,fontSize:'1.2rem',
-                  cursor:'pointer',opacity:currentPage===0?0.3:1}}>←</button>
-              <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream}}>
-                p.{currentPage+1} / {totalPages}</span>
-              <button onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))}
-                disabled={currentPage===totalPages-1}
-                style={{background:'none',border:'none',color:C.cream,fontSize:'1.2rem',
-                  cursor:'pointer',opacity:currentPage===totalPages-1?0.3:1}}>→</button>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -1286,11 +1296,13 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
   const [currentPage, setCurrentPage]     = useState(0);
   const [flash, setFlash]                 = useState(null);
   const [done, setDone]                   = useState(false);
-  const queueRef     = useRef([]);
-  const containerRef = useRef();
-  const imgRef       = useRef();
-  const currentSpotIdRef = useRef(null);
+  const queueRef        = useRef([]);
+  const containerRef    = useRef();
+  const imgRef          = useRef();
+  const currentSpotIdRef  = useRef(null);
+  const currentPageRef    = useRef(0);
   useEffect(()=>{ currentSpotIdRef.current = currentSpotId; },[currentSpotId]);
+  useEffect(()=>{ currentPageRef.current   = currentPage;   },[currentPage]);
 
   const shuffle = arr => {
     const a=[...arr];
@@ -1396,8 +1408,43 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
           display:'flex',alignItems:'center',justifyContent:'center',gap:10,
         }}>✓ GOT IT</button>
       </div>
+      {totalPages>1 && (
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+          padding:'7px 14px',flexShrink:0,
+          background:C.ink,borderBottom:`1px solid ${C.bord}`}}>
+          <button onClick={()=>setCurrentPage(p=>Math.max(0,p-1))} disabled={currentPage===0}
+            style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,
+              padding:'5px 14px',fontFamily:"'Bebas Neue',sans-serif",
+              fontSize:'0.85rem',letterSpacing:'0.06em',
+              cursor:currentPage===0?'default':'pointer',
+              opacity:currentPage===0?0.35:1}}>← PREV</button>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream}}>
+              page {currentPage+1} of {totalPages}
+            </div>
+            {(()=>{
+              const curSpot=spots.find(s=>s.id===currentSpotId);
+              const onPage=curSpot&&curSpot.page===currentPage;
+              return onPage
+                ? <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.68rem',
+                    color:'#4a9eff',marginTop:1}}>current spot ↑</div>
+                : <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.68rem',
+                    color:C.muted,marginTop:1}}>
+                    spot {currentSpotId} on p.{curSpot?curSpot.page+1:'?'}
+                  </div>;
+            })()}
+          </div>
+          <button onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))}
+            disabled={currentPage===totalPages-1}
+            style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,
+              padding:'5px 14px',fontFamily:"'Bebas Neue',sans-serif",
+              fontSize:'0.85rem',letterSpacing:'0.06em',
+              cursor:currentPage===totalPages-1?'default':'pointer',
+              opacity:currentPage===totalPages-1?0.35:1}}>NEXT →</button>
+        </div>
+      )}
       <div ref={containerRef} style={{flex:'1 1 0',minHeight:0,overflowY:'auto',
-        overflowX:'hidden',background:'#0a0805',WebkitOverflowScrolling:'touch'}}>
+        background:'#0a0805',WebkitOverflowScrolling:'touch'}}>
         <div style={{position:'relative',width:'100%'}}>
           <img ref={imgRef} src={pageImages[currentPage]}
             style={{width:'100%',height:'auto',display:'block',
@@ -1405,9 +1452,10 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
             draggable={false}
             onLoad={()=>{
               const id=currentSpotIdRef.current;
+              const pg=currentPageRef.current;
               if(!id||!containerRef.current||!imgRef.current) return;
               const spot=spots.find(s=>s.id===id);
-              if(!spot||spot.page!==currentPage) return;
+              if(!spot||spot.page!==pg) return;
               const imgH=imgRef.current.offsetHeight;
               if(imgH) containerRef.current.scrollTop=Math.max(0,spot.y*imgH-containerRef.current.clientHeight*0.4);
             }}
@@ -1428,22 +1476,6 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
             }}/>
           ))}
         </div>
-        {totalPages>1 && (
-          <div style={{position:'sticky',bottom:0,zIndex:10,display:'flex',
-            alignItems:'center',justifyContent:'space-between',
-            padding:'8px 14px',background:'rgba(26,22,18,0.97)',
-            borderTop:`1px solid ${C.bord}`}}>
-            <button onClick={()=>setCurrentPage(p=>Math.max(0,p-1))} disabled={currentPage===0}
-              style={{background:'none',border:'none',color:C.cream,fontSize:'1.2rem',
-                cursor:'pointer',opacity:currentPage===0?0.3:1}}>←</button>
-            <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream}}>
-              p.{currentPage+1} / {totalPages}</span>
-            <button onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))}
-              disabled={currentPage===totalPages-1}
-              style={{background:'none',border:'none',color:C.cream,fontSize:'1.2rem',
-                cursor:'pointer',opacity:currentPage===totalPages-1?0.3:1}}>→</button>
-          </div>
-        )}
       </div>
     </div>
   );
