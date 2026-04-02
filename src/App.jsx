@@ -351,7 +351,8 @@ export default function App() {
   const [goalTempo,setGoalTempo]   = useState(120);
   const [increment,setIncrement]   = useState(5);
   const [savedExercise,setSavedExercise] = useState(null);
-  const [sessionMode,setSessionMode]   = useState('massed');
+  const [sessionMode,setSessionMode]       = useState('massed');
+  const [interleavedSpots,setInterleavedSpots] = useState([]);
   const [tapPos,setTapPos]             = useState(null);
   const [showOverlay,setShowOverlay]   = useState(false);
   const [locateEx,setLocateEx]         = useState(null);
@@ -400,9 +401,18 @@ export default function App() {
         <ScoreViewScreen
           piece={piece} pageImages={pageImages}
           currentPage={currentPage} setCurrentPage={setCurrentPage}
-          sessionMode={sessionMode} setSessionMode={setSessionMode}
+          sessionMode={sessionMode} setSessionMode={s=>{
+            setSessionMode(s);
+            if(s!=='interleaved') setInterleavedSpots([]);
+          }}
+          interleavedSpots={interleavedSpots}
+          onRemoveSpot={id=>setInterleavedSpots(prev=>{
+            const filtered=prev.filter(s=>s.id!==id);
+            return filtered.map((s,i)=>({...s,id:i+1}));
+          })}
+          onStartSession={()=>setScreen('interleaved-session')}
           locateEx={locateEx}
-          onBack={()=>{ setLocateEx(null); setScreen(locateEx?'library':'library'); }}
+          onBack={()=>{ setLocateEx(null); setInterleavedSpots([]); setScreen('library'); }}
           onTapPassage={async (pos)=>{
             if(locateEx) {
               setTapPos(pos);
@@ -416,7 +426,6 @@ export default function App() {
                   const body = await res.text();
                   setLocateResult({status:'fail', msg:`Error ${res.status}: ${body||res.statusText}`});
                 } else {
-                  // Verify the data actually saved (Supabase silently ignores missing columns)
                   const vr = await sbGet(`/rest/v1/exercises?id=eq.${locateEx.id}&select=score_page,score_y`);
                   const rows = await vr.json();
                   const saved = rows?.[0];
@@ -431,6 +440,11 @@ export default function App() {
               }
               setLocateEx(null);
               setScreen('library');
+            } else if(sessionMode==='interleaved') {
+              setInterleavedSpots(prev=>{
+                if(prev.length>=7) return prev;
+                return [...prev,{id:prev.length+1,page:pos.page,x:pos.x,y:pos.y,checks:0}];
+              });
             } else {
               setTapPos(pos);
               setShowOverlay(true);
@@ -439,8 +453,8 @@ export default function App() {
         />
       )}
 
-      {/* Strategy overlay — not shown in locate mode */}
-      {screen==='score' && showOverlay && !locateEx && (
+      {/* Strategy overlay — massed mode only */}
+      {screen==='score' && showOverlay && !locateEx && sessionMode!=='interleaved' && (
         <StrategyOverlay
           piece={piece}
           profile={profile}
@@ -495,6 +509,14 @@ export default function App() {
           profile={profile} savedExercise={savedExercise}
           tapPos={tapPos}
           onBack={()=>setScreen(piece?'score':'library')}
+        />
+      )}
+
+      {screen==='interleaved-session' && (
+        <InterleavedSessionScreen
+          pageImages={pageImages}
+          spots={interleavedSpots}
+          onBack={()=>{ setInterleavedSpots([]); setSessionMode('massed'); setScreen('score'); }}
         />
       )}
 
@@ -1003,13 +1025,15 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
    SCORE VIEW — home base for a repertoire item
 ═══════════════════════════════════════════════════════════════════════ */
 function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
-  sessionMode, setSessionMode, locateEx, onBack, onTapPassage }) {
+  sessionMode, setSessionMode, interleavedSpots, onRemoveSpot, onStartSession,
+  locateEx, onBack, onTapPassage }) {
 
   const land = useOrientation();
   const totalPages = pageImages.length;
   const showTwo = land && totalPages > 1;
   const rightPage = currentPage + 1 < totalPages ? currentPage + 1 : null;
   const [showHint, setShowHint] = useState(true);
+  const isInterleaved = sessionMode === 'interleaved';
 
   const handleTap = e => {
     const img = e.currentTarget;
@@ -1030,6 +1054,72 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
       cursor:'pointer',
     }}>{label}</button>
   );
+
+  // ── Interleaved placement layout ─────────────────────────────────────
+  if(isInterleaved && !locateEx) {
+    const canStart = interleavedSpots.length >= 3;
+    const spotsOnPage = interleavedSpots.filter(s => s.page === currentPage);
+    return (
+      <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
+        <TopBar
+          left={<BackBtn onClick={onBack} />}
+          center={piece?.title||'INTERLEAVED'}
+          right={<div style={{display:'flex',gap:4}}>{modeBtn('massed','MASSED')}{modeBtn('interleaved','INTERLEAVED')}</div>}
+        />
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+          padding:'8px 14px',flexShrink:0,
+          background:'rgba(74,158,255,0.08)',
+          borderBottom:'1px solid rgba(74,158,255,0.25)',gap:12}}>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+            fontSize:'1rem',color:C.cream}}>
+            {interleavedSpots.length===0
+              ? 'Tap the score to place spots (3–7)'
+              : interleavedSpots.length<3
+              ? `${interleavedSpots.length} spot${interleavedSpots.length!==1?'s':''} placed — need at least 3`
+              : `${interleavedSpots.length} spot${interleavedSpots.length!==1?'s':''} placed — ready`}
+          </div>
+          <button onClick={onStartSession} disabled={!canStart} style={{
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
+            letterSpacing:'0.1em',padding:'7px 18px',flexShrink:0,
+            background:canStart?'#4a9eff':'#2a231d',
+            color:canStart?'white':C.dim,
+            border:`1px solid ${canStart?'#4a9eff':C.bord}`,
+            cursor:canStart?'pointer':'not-allowed',
+            WebkitTapHighlightColor:'transparent',
+          }}>START SESSION →</button>
+        </div>
+        <div style={{flex:'1 1 0',minHeight:0,overflowY:'auto',overflowX:'hidden',
+          background:'#0a0805',WebkitOverflowScrolling:'touch'}}>
+          <div style={{position:'relative',width:'100%'}}>
+            <img data-page={currentPage} src={pageImages[currentPage]}
+              onClick={handleTap}
+              style={{width:'100%',height:'auto',display:'block',
+                userSelect:'none',WebkitUserSelect:'none',cursor:'crosshair'}}
+              onContextMenu={e=>e.preventDefault()} draggable={false} />
+            {spotsOnPage.map(spot=>(
+              <SpotBox key={spot.id} spot={spot} mode="placement" onRemove={onRemoveSpot} />
+            ))}
+          </div>
+          {totalPages>1 && (
+            <div style={{position:'sticky',bottom:0,zIndex:10,display:'flex',
+              alignItems:'center',justifyContent:'space-between',
+              padding:'8px 14px',background:'rgba(26,22,18,0.97)',
+              borderTop:`1px solid ${C.bord}`}}>
+              <button onClick={()=>setCurrentPage(p=>Math.max(0,p-1))} disabled={currentPage===0}
+                style={{background:'none',border:'none',color:C.cream,fontSize:'1.2rem',
+                  cursor:'pointer',opacity:currentPage===0?0.3:1}}>←</button>
+              <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream}}>
+                p.{currentPage+1} / {totalPages}</span>
+              <button onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))}
+                disabled={currentPage===totalPages-1}
+                style={{background:'none',border:'none',color:C.cream,fontSize:'1.2rem',
+                  cursor:'pointer',opacity:currentPage===totalPages-1?0.3:1}}>→</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
@@ -1136,6 +1226,229 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
     </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INTERLEAVED — SPOT BOX
+═══════════════════════════════════════════════════════════════════════ */
+function SpotBox({ spot, mode, onRemove }) {
+  const isDone = spot.checks >= 5;
+  const border = isDone ? '#3db06a' : '#4a9eff';
+  const bg     = isDone ? 'rgba(61,176,106,0.22)' : 'rgba(30,70,160,0.55)';
+  return (
+    <div style={{
+      position:'absolute',
+      left:`calc(${spot.x*100}% - 36px)`,
+      top:`calc(${spot.y*100}% - 26px)`,
+      width:72, height:52,
+      border:`2px solid ${border}`,
+      background:bg,
+      borderRadius:5,
+      display:'flex', flexDirection:'column',
+      alignItems:'center', justifyContent:'space-between',
+      padding:'3px 5px 4px',
+      pointerEvents: mode==='placement' ? 'auto' : 'none',
+      userSelect:'none', WebkitTapHighlightColor:'transparent',
+      zIndex:5,
+    }}>
+      <div style={{display:'flex',width:'100%',justifyContent:'space-between',alignItems:'flex-start'}}>
+        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:15,lineHeight:1,
+          color:isDone?'#3db06a':'#fff',letterSpacing:'0.05em'}}>{spot.id}</span>
+        {mode==='placement' && (
+          <button onClick={e=>{e.stopPropagation();onRemove(spot.id);}} style={{
+            background:'rgba(255,255,255,0.18)',border:'none',
+            color:'rgba(255,255,255,0.85)',width:14,height:14,
+            borderRadius:'50%',cursor:'pointer',fontSize:9,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            padding:0,lineHeight:1,flexShrink:0,
+          }}>✕</button>
+        )}
+      </div>
+      <div style={{display:'flex',gap:3,alignItems:'center'}}>
+        {[0,1,2,3,4].map(i=>(
+          <div key={i} style={{
+            width:9,height:9,borderRadius:'50%',
+            background: i<spot.checks ? '#3db06a' : 'rgba(255,255,255,0.2)',
+            border:`1px solid ${i<spot.checks?'#3db06a':'rgba(255,255,255,0.4)'}`,
+            transition:'background 0.15s',
+          }}/>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INTERLEAVED — SESSION SCREEN
+═══════════════════════════════════════════════════════════════════════ */
+function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
+  const [spots, setSpots]                 = useState(()=>initialSpots.map(s=>({...s,checks:0})));
+  const [currentSpotId, setCurrentSpotId] = useState(null);
+  const [currentPage, setCurrentPage]     = useState(0);
+  const [flash, setFlash]                 = useState(null);
+  const [done, setDone]                   = useState(false);
+  const queueRef     = useRef([]);
+  const containerRef = useRef();
+  const imgRef       = useRef();
+  const currentSpotIdRef = useRef(null);
+  useEffect(()=>{ currentSpotIdRef.current = currentSpotId; },[currentSpotId]);
+
+  const shuffle = arr => {
+    const a=[...arr];
+    for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+    return a;
+  };
+
+  useEffect(()=>{
+    const q=shuffle(initialSpots.map(s=>s.id));
+    const first=q.shift();
+    queueRef.current=q;
+    setCurrentSpotId(first);
+    currentSpotIdRef.current=first;
+    const s=initialSpots.find(s=>s.id===first);
+    if(s) setCurrentPage(s.page);
+  },[]);
+
+  const scrollToSpot = (spotId, pg, updatedSpots) => {
+    requestAnimationFrame(()=>{
+      if(!imgRef.current||!containerRef.current) return;
+      const all = updatedSpots || [];
+      const spot = all.find(s=>s.id===spotId);
+      if(!spot||spot.page!==pg) return;
+      const imgH=imgRef.current.offsetHeight;
+      if(imgH) containerRef.current.scrollTop=Math.max(0,spot.y*imgH-containerRef.current.clientHeight*0.4);
+    });
+  };
+
+  const advance = (updatedSpots) => {
+    if(updatedSpots.every(s=>s.checks>=5)){setDone(true);return;}
+    const incomplete=updatedSpots.filter(s=>s.checks<5).map(s=>s.id);
+    let q=queueRef.current.filter(id=>incomplete.includes(id));
+    if(q.length===0){
+      q=shuffle([...incomplete]);
+      const prev=currentSpotIdRef.current;
+      if(q[0]===prev&&q.length>1){[q[0],q[1]]=[q[1],q[0]];}
+    }
+    const next=q.shift();
+    queueRef.current=q;
+    setCurrentSpotId(next);
+    currentSpotIdRef.current=next;
+    const nextSpot=updatedSpots.find(s=>s.id===next);
+    if(nextSpot){
+      setCurrentPage(nextSpot.page);
+      scrollToSpot(next, nextSpot.page, updatedSpots);
+    }
+  };
+
+  const handleVerdict = (success) => {
+    if(!currentSpotIdRef.current||done) return;
+    setFlash(success?'pass':'fail');
+    setTimeout(()=>setFlash(null),500);
+    const id=currentSpotIdRef.current;
+    const updated=spots.map(s=>s.id===id?{...s,checks:success?s.checks+1:0}:s);
+    setSpots(updated);
+    advance(updated);
+  };
+
+  if(done) return (
+    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0,
+      alignItems:'center',justifyContent:'center',background:C.ink,gap:20,padding:32}}>
+      <div style={{fontSize:'3rem'}}>🎉</div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'2rem',
+        letterSpacing:'0.15em',color:'#3db06a',textAlign:'center'}}>ALL SPOTS MASTERED</div>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+        fontSize:'1.05rem',color:C.muted,textAlign:'center',maxWidth:300}}>
+        {initialSpots.length} spot{initialSpots.length!==1?'s':''}, 5 in a row each.
+      </div>
+      <Btn big onClick={onBack}>← BACK TO SCORE</Btn>
+    </div>
+  );
+
+  const completedCount=spots.filter(s=>s.checks>=5).length;
+  const spotsOnPage=spots.filter(s=>s.page===currentPage);
+  const totalPages=pageImages.length;
+  const verdictBg=flash==='pass'?'rgba(61,176,106,0.14)':flash==='fail'?'rgba(229,53,53,0.12)':'transparent';
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0,background:C.ink}}>
+      <TopBar
+        left={<button onClick={onBack} style={{background:'none',border:`1px solid ${C.bord2}`,
+          color:C.cream,padding:'6px 10px',cursor:'pointer',
+          fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+          letterSpacing:'0.1em'}}>← EXIT</button>}
+        center={currentSpotId ? `SPOT ${currentSpotId} OF ${spots.length}` : 'INTERLEAVED'}
+        right={<span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',color:C.muted}}>
+          {completedCount}/{spots.length} done</span>}
+      />
+      <div style={{display:'flex',flexShrink:0,borderBottom:`1px solid ${C.bord}`,
+        background:verdictBg,transition:'background 0.3s'}}>
+        <button onClick={()=>handleVerdict(false)} style={{
+          flex:1,padding:'16px 0',background:'transparent',border:'none',
+          borderRight:`1px solid ${C.bord}`,color:'#e57373',cursor:'pointer',
+          fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',letterSpacing:'0.12em',
+          WebkitTapHighlightColor:'transparent',
+          display:'flex',alignItems:'center',justifyContent:'center',gap:10,
+        }}>✗ MISS</button>
+        <button onClick={()=>handleVerdict(true)} style={{
+          flex:1,padding:'16px 0',background:'transparent',border:'none',
+          color:'#3db06a',cursor:'pointer',
+          fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',letterSpacing:'0.12em',
+          WebkitTapHighlightColor:'transparent',
+          display:'flex',alignItems:'center',justifyContent:'center',gap:10,
+        }}>✓ GOT IT</button>
+      </div>
+      <div ref={containerRef} style={{flex:'1 1 0',minHeight:0,overflowY:'auto',
+        overflowX:'hidden',background:'#0a0805',WebkitOverflowScrolling:'touch'}}>
+        <div style={{position:'relative',width:'100%'}}>
+          <img ref={imgRef} src={pageImages[currentPage]}
+            style={{width:'100%',height:'auto',display:'block',
+              userSelect:'none',WebkitUserSelect:'none'}}
+            draggable={false}
+            onLoad={()=>{
+              const id=currentSpotIdRef.current;
+              if(!id||!containerRef.current||!imgRef.current) return;
+              const spot=spots.find(s=>s.id===id);
+              if(!spot||spot.page!==currentPage) return;
+              const imgH=imgRef.current.offsetHeight;
+              if(imgH) containerRef.current.scrollTop=Math.max(0,spot.y*imgH-containerRef.current.clientHeight*0.4);
+            }}
+          />
+          {spotsOnPage.map(spot=>(
+            <SpotBox key={spot.id} spot={spot} mode="session" />
+          ))}
+          {spotsOnPage.filter(s=>s.id===currentSpotId).map(spot=>(
+            <div key={'ring'+spot.id} style={{
+              position:'absolute',
+              left:`calc(${spot.x*100}% - 44px)`,
+              top:`calc(${spot.y*100}% - 33px)`,
+              width:88,height:66,
+              border:'2px solid rgba(74,158,255,0.55)',
+              borderRadius:8,
+              boxShadow:'0 0 0 3px rgba(74,158,255,0.2), 0 0 18px rgba(74,158,255,0.35)',
+              pointerEvents:'none',zIndex:6,
+            }}/>
+          ))}
+        </div>
+        {totalPages>1 && (
+          <div style={{position:'sticky',bottom:0,zIndex:10,display:'flex',
+            alignItems:'center',justifyContent:'space-between',
+            padding:'8px 14px',background:'rgba(26,22,18,0.97)',
+            borderTop:`1px solid ${C.bord}`}}>
+            <button onClick={()=>setCurrentPage(p=>Math.max(0,p-1))} disabled={currentPage===0}
+              style={{background:'none',border:'none',color:C.cream,fontSize:'1.2rem',
+                cursor:'pointer',opacity:currentPage===0?0.3:1}}>←</button>
+            <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream}}>
+              p.{currentPage+1} / {totalPages}</span>
+            <button onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))}
+              disabled={currentPage===totalPages-1}
+              style={{background:'none',border:'none',color:C.cream,fontSize:'1.2rem',
+                cursor:'pointer',opacity:currentPage===totalPages-1?0.3:1}}>→</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 /* ── Exercise card with delete confirm ──────────────────────────────── */
 function ExerciseCard({ ex, confirmDelete, setConfirmDelete, deleting, onDelete, onOpen }) {
