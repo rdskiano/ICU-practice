@@ -2191,6 +2191,14 @@ function RespellPopup({note,anchorY,onClose,onDelete,onUpdate}){
   );
 }
 
+// Transpose semitones by instrument name (mirrors the data-t values in the select)
+const INSTR_TRANSPOSE = {
+  'Flute':0,'Oboe':0,'BbClar':-2,'AClar':-3,'Bassoon':0,
+  'EbAlto':3,'TenorSax':-2,'EbBari':-7,'HornF':-5,
+  'BbTrump':-2,'Trombone':0,'Violin':0,'Viola':0,'Cello':0,
+  'Piano':0,'Other':0,
+};
+
 function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }) {
   const land = useOrientation();
   const isLarge = useIsLarge();
@@ -2202,7 +2210,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
   const [selNotes,setSelNotes]       = useState(savedExercise ? savedExercise.notes.split(',').filter(Boolean) : []);
   const [clef,setClef]               = useState(savedExercise?.clef||'treble');
   const [key,setKey]                 = useState(savedExercise?.key||'C');
-  const [instrTranspose,setInstrTranspose] = useState(0);
+  const [instrTranspose,setInstrTranspose] = useState(()=>INSTR_TRANSPOSE[savedExercise?.instrument||'']??0);
   const [accMode,setAccMode]         = useState('sharp');
   const [inputTab,setInputTab]       = useState('keys');
   const [exercises,setExercises]     = useState([]);
@@ -2449,7 +2457,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
         el.style.fill='#1a1208'; el.style.stroke='#1a1208';
       });
     } catch(e){}
-  },[selNotes,clef]);
+  },[selNotes,clef,generated]);
 
   // ── ABCJS exercise rendering ───────────────────────────────────────
   useEffect(()=>{
