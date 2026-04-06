@@ -1075,7 +1075,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const modeBtn = (mode, label) => (
     <button onClick={()=>{
       setSessionMode(mode);
-      if(mode==='interleaved') setShowIntroModal(true);
+      if(mode==='interleaved' && !localStorage.getItem('pfn_hideInterleavedIntro')) setShowIntroModal(true);
     }} style={{
       fontFamily:"'Bebas Neue',sans-serif", fontSize:'0.9rem',
       letterSpacing:'0.1em', padding:'7px 18px',
@@ -1097,12 +1097,11 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const bpmTimerRef    = useRef(null);
   const bpmIntervalRef = useRef(null);
   useEffect(()=>()=>placeMetro.current.stop(),[]);
-  // Auto-select the most recently placed spot and prompt for tempo
+  // Auto-select the most recently placed spot
   useEffect(()=>{
     if(interleavedSpots.length>0) {
       const newest = interleavedSpots[interleavedSpots.length-1];
       setSelectedSpotId(newest.id);
-      setPromptSpotId(newest.id);
     }
   },[interleavedSpots.length]);
 
@@ -1207,17 +1206,24 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               }}>{locked?'✓ SET':'SET TEMPO'}</button>
             );
           })()}
-          <div style={{flex:1,fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-            fontSize:'0.72rem',color:metroWaiting?'#4a9eff':C.muted,
-            lineHeight:1.3,transition:'color 0.2s',minWidth:0}}>
+          <div style={{flex:1,fontFamily:"'Bebas Neue',sans-serif",
+            fontSize:'0.78rem',color:metroWaiting?'#4a9eff':'#c4a060',
+            letterSpacing:'0.08em',lineHeight:1.3,transition:'color 0.2s',minWidth:0}}>
             {metroWaiting
-              ? `▶ then set for spot ${selectedSpotId}`
+              ? `▶ THEN SET FOR SPOT ${selectedSpotId}`
               : interleavedSpots.length===0
-              ? 'tap score to place spots (3–7)'
+              ? 'TAP SCORE TO PLACE SPOTS (3–7)'
               : interleavedSpots.length<3
-              ? `${interleavedSpots.length} placed — need ${3-interleavedSpots.length} more`
-              : `${interleavedSpots.length} spots — tap to select`}
+              ? `${interleavedSpots.length} PLACED — NEED ${3-interleavedSpots.length} MORE`
+              : `${interleavedSpots.length} SPOTS — TAP TO SELECT, THEN SET TEMPO`}
           </div>
+          <button onClick={()=>setShowIntroModal(true)} style={{
+            background:'none',border:`1px solid ${C.bord2}`,color:C.muted,
+            width:28,height:28,cursor:'pointer',flexShrink:0,
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            WebkitTapHighlightColor:'transparent',borderRadius:3,
+          }}>?</button>
 
           {/* Intro modal */}
           {showIntroModal && (
@@ -1251,43 +1257,14 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 letterSpacing:'0.12em',cursor:'pointer',borderRadius:3,
                 WebkitTapHighlightColor:'transparent',
               }}>GOT IT →</button>
+              <button onClick={()=>{localStorage.setItem('pfn_hideInterleavedIntro','1');setShowIntroModal(false);}} style={{
+                padding:'6px 0',background:'transparent',border:'none',
+                color:C.muted,fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                fontSize:'0.9rem',cursor:'pointer',WebkitTapHighlightColor:'transparent',
+              }}>Don't show this again</button>
             </div>
           )}
 
-          {/* Tempo prompt */}
-          {promptSpotId && (
-            <div style={{
-              position:'fixed',left:'50%',top:'50%',
-              transform:'translate(-50%,-50%)',
-              zIndex:50,background:C.ink,border:'2px solid #4a9eff',
-              borderRadius:6,padding:'22px 24px',
-              width:'min(320px, 85vw)',
-              boxShadow:'0 8px 40px rgba(0,0,0,0.7)',
-              display:'flex',flexDirection:'column',gap:14,textAlign:'center',
-            }}>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
-                letterSpacing:'0.15em',color:'#4a9eff'}}>SPOT {promptSpotId} PLACED</div>
-              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-                fontSize:'1.05rem',color:C.cream,lineHeight:1.5}}>
-                Set a tempo for this spot?
-              </div>
-              <div style={{display:'flex',gap:10}}>
-                <button onClick={()=>{setPromptSpotId(null);setMetroWaiting(true);}} style={{
-                  flex:1,padding:'10px 0',background:'#4a9eff',border:'none',color:'white',
-                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
-                  letterSpacing:'0.12em',cursor:'pointer',borderRadius:3,
-                  WebkitTapHighlightColor:'transparent',
-                }}>YES</button>
-                <button onClick={()=>{setPromptSpotId(null);setMetroWaiting(false);}} style={{
-                  flex:1,padding:'10px 0',background:'transparent',
-                  border:`1px solid ${C.bord2}`,color:C.muted,
-                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
-                  letterSpacing:'0.12em',cursor:'pointer',borderRadius:3,
-                  WebkitTapHighlightColor:'transparent',
-                }}>NO</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
