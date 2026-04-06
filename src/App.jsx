@@ -3388,6 +3388,7 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
   const [incSize, setIncSize]       = useState(5);
   const [showComplete, setShowComplete] = useState(false);
   const [spotId, setSpotId]         = useState(null);
+  const [startBpm, setStartBpm]     = useState(60);
   const metro = useRef(new Metro());
   const bpmTimerRef    = useRef(null);
   const bpmIntervalRef = useRef(null);
@@ -3420,6 +3421,7 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
   const startSession = async () => {
     setPhase('practice');
     setMaxTempo(bpm);
+    setStartBpm(bpm);
     // Create or update spot
     if(!spotId && profile?.email) {
       try {
@@ -3476,12 +3478,12 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
           spot_id: spotId||null,
           piece_id: scuSpot?.piece_id||null,
           strategy: 'scu',
-          start_tempo: bpm <= maxTempo ? bpm : null,
+          start_tempo: startBpm,
           max_tempo: maxTempo,
           perf_tempo: perfTempo,
           reps_total: totalReps,
           reps_clean: cleanReps,
-          duration_sec: Math.round((Date.now() - sessionStart()) / 1000),
+          duration_sec: Math.round((Date.now() - sessionStart) / 1000),
         });
       } catch(e){ console.error('log save failed', e); }
     }
