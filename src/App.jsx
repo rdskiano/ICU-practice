@@ -3391,6 +3391,8 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
   const metro = useRef(new Metro());
   const bpmTimerRef    = useRef(null);
   const bpmIntervalRef = useRef(null);
+  const land = useOrientation();
+  const [currentPage, setCurrentPage] = useState(tapPos?.page||0);
 
   useEffect(()=>()=>metro.current.stop(),[]);
   useEffect(()=>{if(metroOn)metro.current.start(bpm);else metro.current.stop();},[metroOn]);
@@ -3573,8 +3575,6 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
   }
 
   // Practice phase
-  const land = useOrientation();
-  const [currentPage, setCurrentPage] = useState(tapPos?.page||0);
   const totalPages = pageImages.length;
   const showTwo = land && totalPages > 1;
 
