@@ -2592,12 +2592,11 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
     try {
       const prof = JSON.parse(localStorage.getItem('murProfile')||'{}');
       if(prof.email) {
-        sbPost('/rest/v1/practice_log', {
+        sbPost('/rest/v1/practice_logs', {
           user_email: prof.email,
           piece_id: piece?.id||null,
-          strategy: 'RV',
-          grouping: sec,
-          n_notes: selNotes.length,
+          strategy: 'mur',
+          notes: `grouping: ${sec}, ${selNotes.length} notes`,
         }).catch(()=>{});
       }
     } catch(e){}
@@ -2892,14 +2891,11 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
     try {
       const prof = profile || JSON.parse(localStorage.getItem('murProfile')||'{}');
       if(prof.email) {
-        sbPost('/rest/v1/practice_log', {
+        sbPost('/rest/v1/practice_logs', {
           user_email: prof.email,
           piece_id: piece?.id||null,
-          strategy: 'RV',
-          grouping: g2s(activeGroup),
-          n_notes: selNotes.length,
-          doc_name: docName||null,
-          event: 'completed',
+          strategy: 'mur',
+          notes: `grouping: ${g2s(activeGroup)}, ${selNotes.length} notes, ${docName||'untitled'}`,
         }).catch(()=>{});
       }
     } catch(e){}
@@ -3577,9 +3573,14 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
   }
 
   // Practice phase
+  const land = useOrientation();
+  const [currentPage, setCurrentPage] = useState(tapPos?.page||0);
+  const totalPages = pageImages.length;
+  const showTwo = land && totalPages > 1;
+
   const streakDots = range(0,10).map(i=>(
     <div key={i} style={{
-      width:20,height:20,borderRadius:'50%',
+      width:14,height:14,borderRadius:'50%',
       background:i<streak?'#3db06a':'#2a231d',
       border:`2px solid ${i<streak?'#3db06a':'#444'}`,
       transition:'background 0.15s,border-color 0.15s',
@@ -3590,82 +3591,117 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
 
   return (
     <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
-      {/* Top bar */}
-      <div style={{flexShrink:0,borderBottom:`2px solid #3db06a`,background:C.ink,
-        padding:'8px 14px',display:'flex',alignItems:'center',gap:10}}>
-        <BackBtn onClick={saveAndExit} label="← EXIT"/>
-        <div style={{flex:1}}/>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.8rem',
-          letterSpacing:'0.12em',color:C.muted}}>
-          {totalReps} reps · {cleanReps} clean
+      {/* Top bar — compact, like ICU */}
+      <div style={{flexShrink:0,borderBottom:`2px solid #3db06a`,background:C.ink}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px'}}>
+          <button onClick={saveAndExit} style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,padding:'6px 10px',cursor:'pointer',fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',letterSpacing:'0.1em',flexShrink:0}}>← EXIT</button>
+
+          <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+            {/* Tempo display */}
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'clamp(1.4rem,4vw,2rem)',color:C.cream,lineHeight:1}}>
+              ♩ = {bpm}
+            </div>
+            <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.7rem',color:C.muted}}>/ {perfTempo}</span>
+
+            {/* Metronome */}
+            <button onClick={()=>setMetroOn(m=>!m)} style={{
+              background:metroOn?'#3db06a':'#2a231d',border:`2px solid ${metroOn?'#3db06a':'#666'}`,
+              color:'white',width:36,height:36,cursor:'pointer',fontSize:'1rem',
+              display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
+              WebkitTapHighlightColor:'transparent',
+            }}>{metroOn?'⏸':'▶'}</button>
+          </div>
+
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
+            letterSpacing:'0.1em',color:C.muted,flexShrink:0,textAlign:'right'}}>
+            {totalReps} reps<br/>{cleanReps} clean
+          </div>
+        </div>
+
+        {/* Streak dots + buttons row */}
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'4px 10px 6px',
+          justifyContent:'center'}}>
+          <div style={{display:'flex',gap:4}}>{streakDots}</div>
+          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
+            letterSpacing:'0.1em',color:'#3db06a',minWidth:40,textAlign:'center'}}>
+            {streak}/10
+          </span>
+          {!showComplete && (
+            <>
+              <button onClick={()=>handleRep(true)} style={{
+                padding:'6px 18px',background:'#3db06a',border:'none',color:'white',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
+                letterSpacing:'0.08em',cursor:'pointer',
+                WebkitTapHighlightColor:'transparent',
+              }}>✓ CLEAN</button>
+              <button onClick={()=>handleRep(false)} style={{
+                padding:'6px 18px',background:'#e53535',border:'none',color:'white',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
+                letterSpacing:'0.08em',cursor:'pointer',
+                WebkitTapHighlightColor:'transparent',
+              }}>✗ MISS</button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Progress bar */}
-      <div style={{height:4,background:C.bord,flexShrink:0}}>
+      <div style={{height:3,background:C.bord,flexShrink:0}}>
         <div style={{height:'100%',background:'#3db06a',width:`${progressPct}%`,transition:'width 0.3s'}}/>
       </div>
 
-      {/* Main content */}
-      <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',
-        justifyContent:'center',gap:20,padding:'20px 24px',position:'relative'}}>
+      {/* Score display — fills remaining space */}
+      <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex',position:'relative'}}>
+        {/* Page arrows */}
+        {!showTwo && totalPages>1 && currentPage>0 && (
+          <button onClick={()=>setCurrentPage(p=>p-1)} style={{
+            position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',zIndex:10,
+            background:'rgba(26,22,18,0.7)',border:'none',color:C.cream,fontSize:'1.8rem',
+            padding:'16px 10px',cursor:'pointer',borderRadius:'0 4px 4px 0',
+            WebkitTapHighlightColor:'transparent',
+          }}>‹</button>
+        )}
+        {!showTwo && totalPages>1 && currentPage<totalPages-1 && (
+          <button onClick={()=>setCurrentPage(p=>p+1)} style={{
+            position:'absolute',right:0,top:'50%',transform:'translateY(-50%)',zIndex:10,
+            background:'rgba(26,22,18,0.7)',border:'none',color:C.cream,fontSize:'1.8rem',
+            padding:'16px 10px',cursor:'pointer',borderRadius:'4px 0 0 4px',
+            WebkitTapHighlightColor:'transparent',
+          }}>›</button>
+        )}
 
-        {/* Tempo display */}
-        <div style={{textAlign:'center'}}>
-          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
-            letterSpacing:'0.2em',color:C.muted,marginBottom:4}}>CURRENT TEMPO</div>
-          <div style={{fontFamily:"'Bebas Neue',sans-serif",
-            fontSize:'clamp(2.5rem,10vw,4rem)',color:C.cream,lineHeight:1}}>
-            ♩ = {bpm}
-          </div>
-          <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',
-            color:C.muted,marginTop:4}}>goal: {perfTempo}</div>
+        <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
+          <img src={pageImages[currentPage]}
+            style={{width:'100%',height:'100%',objectFit:'contain',display:'block',userSelect:'none'}}
+            draggable={false} />
         </div>
-
-        {/* Metronome toggle */}
-        <button onClick={()=>setMetroOn(m=>!m)} style={{
-          background:metroOn?'#3db06a':'#2a231d',
-          border:`2px solid ${metroOn?'#3db06a':'#666'}`,
-          color:'white',width:56,height:56,cursor:'pointer',
-          fontSize:'1.4rem',display:'flex',alignItems:'center',justifyContent:'center',
-          WebkitTapHighlightColor:'transparent',
-          transition:'background 0.2s',
-        }}>{metroOn?'⏸':'▶'}</button>
-
-        {/* Streak counter */}
-        <div style={{textAlign:'center'}}>
-          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
-            letterSpacing:'0.2em',color:'#3db06a',marginBottom:8}}>
-            CLEAN STREAK: {streak} / 10
-          </div>
-          <div style={{display:'flex',gap:6,justifyContent:'center'}}>
-            {streakDots}
-          </div>
-        </div>
-
-        {/* Clean / Miss buttons */}
-        {!showComplete && (
-          <div style={{display:'flex',gap:16,marginTop:8}}>
-            <button onClick={()=>handleRep(true)} style={{
-              padding:'16px 36px',background:'#3db06a',border:'none',color:'white',
-              fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.3rem',
-              letterSpacing:'0.1em',cursor:'pointer',
-              WebkitTapHighlightColor:'transparent',
-            }}>✓ CLEAN</button>
-            <button onClick={()=>handleRep(false)} style={{
-              padding:'16px 36px',background:'#e53535',border:'none',color:'white',
-              fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.3rem',
-              letterSpacing:'0.1em',cursor:'pointer',
-              WebkitTapHighlightColor:'transparent',
-            }}>✗ MISS</button>
+        {showTwo && currentPage+1<totalPages && (
+          <div style={{position:'relative',flex:1,minWidth:0,borderLeft:`1px solid ${C.bord}`,overflow:'hidden'}}>
+            <img src={pageImages[currentPage+1]}
+              style={{width:'100%',height:'100%',objectFit:'contain',display:'block',userSelect:'none'}}
+              draggable={false} />
           </div>
         )}
 
-        {/* Completed 10! Increment picker */}
-        {showComplete && (
-          <div style={{textAlign:'center',display:'flex',flexDirection:'column',gap:14,
-            background:C.panel,border:`2px solid #3db06a`,padding:'20px 24px',
-            maxWidth:340,width:'100%'}}>
+        {/* Page indicator */}
+        {totalPages>1 && !showTwo && (
+          <div style={{position:'absolute',bottom:8,left:'50%',transform:'translateX(-50%)',
+            fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',color:C.muted,
+            background:'rgba(26,22,18,0.8)',padding:'3px 10px',borderRadius:3}}>
+            {currentPage+1} / {totalPages}
+          </div>
+        )}
+      </div>
+
+      {/* Completed 10 overlay */}
+      {showComplete && (
+        <>
+          <div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,0.6)'}}/>
+          <div style={{position:'fixed',left:'50%',top:'50%',transform:'translate(-50%,-50%)',
+            zIndex:501,background:C.ink,border:`2px solid #3db06a`,
+            padding:'24px',width:'min(340px,88vw)',
+            display:'flex',flexDirection:'column',gap:14,textAlign:'center',
+            boxShadow:'0 8px 40px rgba(0,0,0,0.8)'}}>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.2rem',
               letterSpacing:'0.12em',color:'#3db06a'}}>
               10 CLEAN REPS! 🎉
@@ -3701,8 +3737,8 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
               }}>DONE FOR TODAY</button>
             </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
@@ -4002,16 +4038,13 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
     try {
       const prof = profile || JSON.parse(localStorage.getItem('murProfile')||'{}');
       if(prof.email) {
-        sbPost('/rest/v1/practice_log', {
+        sbPost('/rest/v1/practice_logs', {
           user_email: prof.email,
           piece_id: piece?.id||null,
-          strategy: 'ICU',
-          n_units: N,
+          strategy: 'icu',
           start_tempo: startTempo,
-          goal_tempo: goalTempo,
-          score_page: tapPos?.page??null,
-          score_x: tapPos?.x??null,
-          score_y: tapPos?.y??null,
+          perf_tempo: goalTempo,
+          notes: `${N} units`,
         }).catch(()=>{});
       }
     } catch(e){}
@@ -4022,18 +4055,14 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
     try {
       const prof = profile || JSON.parse(localStorage.getItem('murProfile')||'{}');
       if(prof.email) {
-        sbPost('/rest/v1/practice_log', {
+        sbPost('/rest/v1/practice_logs', {
           user_email: prof.email,
           piece_id: piece?.id||null,
-          strategy: 'ICU',
-          n_units: N,
+          strategy: 'icu',
           start_tempo: startTempo,
-          goal_tempo: goalTempo,
-          completed_tempo: step.tempo,
-          score_page: tapPos?.page??null,
-          score_x: tapPos?.x??null,
-          score_y: tapPos?.y??null,
-          event: 'completed',
+          max_tempo: step.tempo,
+          perf_tempo: goalTempo,
+          notes: `${N} units, completed`,
         }).catch(()=>{});
       }
     } catch(e){}
