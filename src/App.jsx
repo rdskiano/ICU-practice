@@ -1756,8 +1756,12 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
   );
 
   const completedCount=spots.filter(s=>s.checks>=5).length;
-  const spotsOnPage=spots.filter(s=>s.page===currentPage);
+  const land = useOrientation();
   const totalPages=pageImages.length;
+  const showTwo = land && totalPages > 1;
+  const rightPage = currentPage+1 < totalPages ? currentPage+1 : null;
+  const spotsOnPage=spots.filter(s=>s.page===currentPage);
+  const spotsOnRight=showTwo&&rightPage!==null?spots.filter(s=>s.page===rightPage):[];
   const verdictBg=flash==='pass'?'rgba(61,176,106,0.14)':flash==='fail'?'rgba(229,53,53,0.12)':'transparent';
 
   return (
@@ -1771,50 +1775,52 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
         right={<span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',color:C.muted}}>
           {completedCount}/{spots.length} done</span>}
       />
-      <div style={{display:'flex',flexShrink:0,borderBottom:`1px solid ${C.bord}`,
-        background:verdictBg,transition:'background 0.3s'}}>
+
+      {/* Verdict + metro bar — compact single row */}
+      <div style={{display:'flex',alignItems:'center',gap:6,
+        padding:'6px 10px',flexShrink:0,
+        background:verdictBg,borderBottom:`1px solid ${C.bord}`,
+        transition:'background 0.3s'}}>
+        {/* Miss / Got it */}
         <button onClick={()=>handleVerdict(false)} style={{
-          flex:1,padding:'16px 0',background:'transparent',border:'none',
-          borderRight:`1px solid ${C.bord}`,color:'#e57373',cursor:'pointer',
-          fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',letterSpacing:'0.12em',
-          WebkitTapHighlightColor:'transparent',
-          display:'flex',alignItems:'center',justifyContent:'center',gap:10,
+          padding:'6px 14px',background:'transparent',border:`1px solid #e57373`,
+          color:'#e57373',cursor:'pointer',
+          fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',letterSpacing:'0.08em',
+          WebkitTapHighlightColor:'transparent',flexShrink:0,
         }}>✗ MISS</button>
         <button onClick={()=>handleVerdict(true)} style={{
-          flex:1,padding:'16px 0',background:'transparent',border:'none',
+          padding:'6px 14px',background:'transparent',border:`1px solid #3db06a`,
           color:'#3db06a',cursor:'pointer',
-          fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',letterSpacing:'0.12em',
-          WebkitTapHighlightColor:'transparent',
-          display:'flex',alignItems:'center',justifyContent:'center',gap:10,
+          fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',letterSpacing:'0.08em',
+          WebkitTapHighlightColor:'transparent',flexShrink:0,
         }}>✓ GOT IT</button>
-      </div>
-      {/* Metronome bar */}
-      {(()=>{
-        const curSpot = spots.find(s=>s.id===currentSpotId);
-        const alreadyLocked = curSpot?.bpm === metroBpm;
-        const adjBpm = delta => {
-          const next = Math.min(220, Math.max(30, metroBpm + delta));
-          setMetroBpm(next);
-        };
-        const bpmBtn = (label, delta) => (
-          <button onClick={()=>adjBpm(delta)} style={{
-            background:'#2a231d',border:`1px solid ${C.bord2}`,color:C.cream,
-            width:36,height:36,cursor:'pointer',
-            fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
-            display:'flex',alignItems:'center',justifyContent:'center',
-            flexShrink:0,WebkitTapHighlightColor:'transparent',
-          }}>{label}</button>
-        );
-        return (
-          <div style={{display:'flex',alignItems:'center',gap:8,
-            padding:'8px 14px',flexShrink:0,
-            background:C.panel,borderBottom:`1px solid ${C.bord}`}}>
-            {bpmBtn('−', -5)}
+
+        <div style={{width:1,height:24,background:C.bord,flexShrink:0}}/>
+
+        {/* Metronome controls */}
+        {(()=>{
+          const curSpot = spots.find(s=>s.id===currentSpotId);
+          const alreadyLocked = curSpot?.bpm === metroBpm;
+          const adjBpm = delta => setMetroBpm(b=>Math.min(220,Math.max(30,b+delta)));
+          return (<>
+            <button onClick={()=>adjBpm(-5)} style={{
+              background:'#2a231d',border:`1px solid ${C.bord2}`,color:C.cream,
+              width:32,height:32,cursor:'pointer',flexShrink:0,
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              WebkitTapHighlightColor:'transparent',
+            }}>−</button>
             <span style={{fontFamily:"'Bebas Neue',sans-serif",
-              fontSize:'clamp(1.4rem,4vw,1.9rem)',letterSpacing:'0.06em',
+              fontSize:'1.2rem',letterSpacing:'0.06em',
               color:metroOn?C.accent:C.cream,lineHeight:1,
-              minWidth:90,textAlign:'center',flexShrink:0}}>♩ = {metroBpm}</span>
-            {bpmBtn('+', 5)}
+              minWidth:72,textAlign:'center',flexShrink:0}}>♩ = {metroBpm}</span>
+            <button onClick={()=>adjBpm(5)} style={{
+              background:'#2a231d',border:`1px solid ${C.bord2}`,color:C.cream,
+              width:32,height:32,cursor:'pointer',flexShrink:0,
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              WebkitTapHighlightColor:'transparent',
+            }}>+</button>
             <button onClick={()=>{
               const next=!metroOn;
               setMetroOn(next);
@@ -1822,68 +1828,72 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
             }} style={{
               background:metroOn?C.accent:'#2a231d',
               border:`2px solid ${metroOn?C.accent:'#666'}`,
-              color:'white',width:40,height:40,cursor:'pointer',
-              fontSize:'1.1rem',display:'flex',alignItems:'center',justifyContent:'center',
+              color:'white',width:36,height:36,cursor:'pointer',
+              fontSize:'1rem',display:'flex',alignItems:'center',justifyContent:'center',
               flexShrink:0,WebkitTapHighlightColor:'transparent',
             }}>{metroOn?'⏸':'▶'}</button>
             <button onClick={()=>{
               if(!currentSpotId) return;
               setSpots(prev=>prev.map(s=>s.id===currentSpotId?{...s,bpm:metroBpm}:s));
             }} style={{
-              flex:1,padding:'8px 6px',
+              flexShrink:0,padding:'5px 10px',
               background:alreadyLocked?'rgba(61,176,106,0.18)':'#2a231d',
               border:`1px solid ${alreadyLocked?'#3db06a':C.bord2}`,
               color:alreadyLocked?'#3db06a':C.cream,
-              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.78rem',
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.72rem',
               letterSpacing:'0.08em',cursor:'pointer',
-              WebkitTapHighlightColor:'transparent',textAlign:'center',lineHeight:1.3,
-            }}>
-              {alreadyLocked ? '✓ LOCKED' : `LOCK IN →\nSPOT ${currentSpotId||'—'}`}
-            </button>
-          </div>
-        );
-      })()}
+              WebkitTapHighlightColor:'transparent',whiteSpace:'nowrap',
+            }}>{alreadyLocked?'✓ SET':'SET TEMPO'}</button>
+          </>);
+        })()}
 
-      {totalPages>1 && (
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
-          padding:'7px 14px',flexShrink:0,
-          background:C.ink,borderBottom:`1px solid ${C.bord}`}}>
-          <button onClick={()=>setCurrentPage(p=>Math.max(0,p-1))} disabled={currentPage===0}
-            style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,
-              padding:'5px 14px',fontFamily:"'Bebas Neue',sans-serif",
-              fontSize:'0.85rem',letterSpacing:'0.06em',
-              cursor:currentPage===0?'default':'pointer',
-              opacity:currentPage===0?0.35:1}}>← PREV</button>
-          <div style={{textAlign:'center'}}>
-            <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream}}>
-              page {currentPage+1} of {totalPages}
+        {/* Checks display */}
+        {(()=>{
+          const curSpot = spots.find(s=>s.id===currentSpotId);
+          return curSpot ? (
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
+              color:'#4a9eff',letterSpacing:'0.08em',flexShrink:0,textAlign:'center',
+              minWidth:30}}>
+              {curSpot.checks}/5
             </div>
-            {(()=>{
-              const curSpot=spots.find(s=>s.id===currentSpotId);
-              const onPage=curSpot&&curSpot.page===currentPage;
-              return onPage
-                ? <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.68rem',
-                    color:'#4a9eff',marginTop:1}}>current spot ↑</div>
-                : <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.68rem',
-                    color:C.muted,marginTop:1}}>
-                    spot {currentSpotId} on p.{curSpot?curSpot.page+1:'?'}
-                  </div>;
-            })()}
+          ) : null;
+        })()}
+      </div>
+
+      {/* Score — full remaining height with floating arrows */}
+      <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex',position:'relative'}}>
+        {/* Floating page arrows */}
+        {totalPages>1 && currentPage>0 && (
+          <button onClick={()=>setCurrentPage(p=>p-1)} style={{
+            position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',zIndex:10,
+            background:'rgba(26,22,18,0.7)',border:'none',color:C.cream,fontSize:'1.8rem',
+            padding:'16px 10px',cursor:'pointer',borderRadius:'0 4px 4px 0',
+            WebkitTapHighlightColor:'transparent',
+          }}>‹</button>
+        )}
+        {totalPages>1 && currentPage<totalPages-1 && !(showTwo && currentPage+2>=totalPages) && (
+          <button onClick={()=>setCurrentPage(p=>p+1)} style={{
+            position:'absolute',right:0,top:'50%',transform:'translateY(-50%)',zIndex:10,
+            background:'rgba(26,22,18,0.7)',border:'none',color:C.cream,fontSize:'1.8rem',
+            padding:'16px 10px',cursor:'pointer',borderRadius:'4px 0 0 4px',
+            WebkitTapHighlightColor:'transparent',
+          }}>›</button>
+        )}
+
+        {/* Page indicator */}
+        {totalPages>1 && !showTwo && (
+          <div style={{position:'absolute',bottom:8,left:'50%',transform:'translateX(-50%)',
+            zIndex:10,background:'rgba(26,22,18,0.8)',padding:'4px 12px',borderRadius:12,
+            fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream,
+            pointerEvents:'none'}}>
+            {currentPage+1} / {totalPages}
           </div>
-          <button onClick={()=>setCurrentPage(p=>Math.min(totalPages-1,p+1))}
-            disabled={currentPage===totalPages-1}
-            style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,
-              padding:'5px 14px',fontFamily:"'Bebas Neue',sans-serif",
-              fontSize:'0.85rem',letterSpacing:'0.06em',
-              cursor:currentPage===totalPages-1?'default':'pointer',
-              opacity:currentPage===totalPages-1?0.35:1}}>NEXT →</button>
-        </div>
-      )}
-      <div ref={containerRef} style={{flex:'1 1 0',minHeight:0,overflowY:'auto',
-        background:'#0a0805',WebkitOverflowScrolling:'touch'}}>
-        <div style={{position:'relative',width:'100%'}}>
+        )}
+
+        {/* Left page */}
+        <div ref={containerRef} style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
           <img ref={imgRef} src={pageImages[currentPage]}
-            style={{width:'100%',height:'auto',display:'block',
+            style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
               userSelect:'none',WebkitUserSelect:'none'}}
             draggable={false}
             onLoad={()=>{
@@ -1912,6 +1922,32 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
             }}/>
           ))}
         </div>
+
+        {/* Right page (landscape) */}
+        {showTwo && rightPage!==null && (
+          <div style={{position:'relative',flex:1,minWidth:0,
+            borderLeft:`1px solid ${C.bord}`,overflow:'hidden'}}>
+            <img src={pageImages[rightPage]}
+              style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
+                userSelect:'none',WebkitUserSelect:'none'}}
+              draggable={false} />
+            {spotsOnRight.map(spot=>(
+              <SpotBox key={spot.id} spot={spot} mode="session" isCurrent={spot.id===currentSpotId} />
+            ))}
+            {spotsOnRight.filter(s=>s.id===currentSpotId).map(spot=>(
+              <div key={'ring'+spot.id} style={{
+                position:'absolute',
+                left:`calc(${spot.x*100}% - 44px)`,
+                top:`calc(${spot.y*100}% - 33px)`,
+                width:88,height:66,
+                border:'2px solid rgba(74,158,255,0.55)',
+                borderRadius:8,
+                boxShadow:'0 0 0 3px rgba(74,158,255,0.2), 0 0 18px rgba(74,158,255,0.35)',
+                pointerEvents:'none',zIndex:6,
+              }}/>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
