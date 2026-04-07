@@ -1261,10 +1261,10 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
       if(mode==='interleaved' && !localStorage.getItem('pfn_hideInterleavedIntro')) setShowIntroModal(true);
     }} style={{
       fontFamily:"'Bebas Neue',sans-serif", fontSize:'0.9rem',
-      letterSpacing:'0.1em', padding:'7px 18px',
-      background: sessionMode===mode ? C.accent : '#2a231d',
-      color: sessionMode===mode ? 'white' : C.muted,
-      border: `1px solid ${sessionMode===mode ? C.accent : C.bord}`,
+      letterSpacing:'0.1em', padding:'7px 18px', borderRadius:6,
+      background: sessionMode===mode ? C.accent : '#f0f0f0',
+      color: sessionMode===mode ? 'white' : '#666',
+      border: `1px solid ${sessionMode===mode ? C.accent : '#ddd'}`,
       cursor:'pointer',
     }}>{label}</button>
   );
@@ -1309,7 +1309,20 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   return (
     <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
       <TopBar
-        left={<BackBtn onClick={onBack} />}
+        left={<div style={{display:'flex',alignItems:'center',gap:6}}>
+          <BackBtn onClick={onBack} />
+          {!locateEx && !isInterleaved && (
+            <button onClick={()=>setShowDots(d=>!d)} style={{
+              background:showDots?'rgba(46,170,87,0.12)':'#f0f0f0',
+              border:`1px solid ${showDots?'#2eaa57':'#ddd'}`,
+              color:showDots?'#2eaa57':'#999',
+              padding:'4px 10px',borderRadius:12,
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',
+              letterSpacing:'0.08em',cursor:'pointer',
+              WebkitTapHighlightColor:'transparent',
+            }}>{showDots?'● SPOTS':'○ SPOTS'}</button>
+          )}
+        </div>}
         center={locateEx ? 'LOCATE EXERCISE' : (piece?.title||'SCORE')}
         right={locateEx ? null : (
           <div style={{display:'flex',gap:4,alignItems:'center'}}>
@@ -1519,20 +1532,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
           }}>{currentPage+1} / {totalPages}</div>
         )}
 
-        {/* Practice history toggle */}
-        {!isInterleaved && !locateEx && (
-          <button onClick={()=>setShowDots(d=>!d)} style={{
-            position:'absolute',bottom:12,right:12,zIndex:10,
-            background:showDots?'rgba(61,176,106,0.85)':'rgba(26,22,18,0.8)',
-            border:`1px solid ${showDots?'#3db06a':'#555'}`,
-            color:showDots?'white':C.muted,
-            padding:'5px 10px',borderRadius:12,
-            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
-            letterSpacing:'0.08em',cursor:'pointer',
-            WebkitTapHighlightColor:'transparent',
-            transition:'background 0.2s,border-color 0.2s',
-          }}>{showDots?'● HIDE SPOTS':'○ SHOW SPOTS'}</button>
-        )}
+        {/* Practice history toggle — moved to top bar */}
 
         <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
           <img data-page={currentPage} src={pageImages[currentPage]}
