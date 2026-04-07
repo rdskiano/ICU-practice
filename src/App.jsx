@@ -645,6 +645,7 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
   const [pieces,setPieces]       = useState([]);
   const [exercises,setExercises] = useState([]);
   const [logs,setLogs]           = useState([]);
+  const [spots,setSpots]         = useState([]);
   const [loading,setLoading]     = useState(true);
   const [showUpload,setShowUpload] = useState(false);
   const [title,setTitle]         = useState('');
@@ -680,15 +681,17 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [rp, re, rl] = await Promise.all([
+      const [rp, re, rl, rs] = await Promise.all([
         sbGet(`/rest/v1/pieces?user_email=eq.${encodeURIComponent(profile.email)}&order=composer.asc,title.asc`),
         sbGet(`/rest/v1/exercises?user_email=eq.${encodeURIComponent(profile.email)}&order=created_at.desc`),
         sbGet(`/rest/v1/practice_logs?user_email=eq.${encodeURIComponent(profile.email)}&order=session_date.desc,created_at.desc&limit=100`),
+        sbGet(`/rest/v1/practice_spots?user_email=eq.${encodeURIComponent(profile.email)}`),
       ]);
       setPieces(await rp.json()||[]);
       setExercises(await re.json()||[]);
       setLogs(await rl.json()||[]);
-    } catch { setPieces([]); setExercises([]); setLogs([]); }
+      setSpots(await rs.json()||[]);
+    } catch { setPieces([]); setExercises([]); setLogs([]); setSpots([]); }
     setLoading(false);
   };
 
@@ -1075,6 +1078,7 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
                   </div>
                   {dayLogs.map(l => {
                     const p = pieces.find(p=>String(p.id)===String(l.piece_id));
+                    const sp = spots.find(s=>s.id===l.spot_id);
                     const pct = (l.perf_tempo && l.start_tempo && l.max_tempo && l.perf_tempo > l.start_tempo)
                       ? Math.round(((l.max_tempo - l.start_tempo) / (l.perf_tempo - l.start_tempo)) * 100)
                       : null;
@@ -1084,7 +1088,9 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.95rem',
                             letterSpacing:'0.08em',color:C.cream}}>
-                            {l.strategy?.toUpperCase()||'PRACTICE'} {p ? `— ${p.title}` : ''}
+                            {l.strategy?.toUpperCase()||'PRACTICE'}
+                            {sp?.label ? ` — ${sp.label}` : ''}
+                            {p && !sp?.label ? ` — ${p.title}` : ''}
                           </div>
                           <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',
                             color:C.muted,marginTop:3}}>
@@ -3562,6 +3568,9 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
   const [showComplete, setShowComplete] = useState(false);
   const [spotId, setSpotId]         = useState(null);
   const [startBpm, setStartBpm]     = useState(60);
+  const [spotLabel, setSpotLabel]   = useState('');
+  const [showTempos, setShowTempos] = useState(false);
+  const [allSpots, setAllSpots]     = useState([]); // all spots for this piece
   const metro = useRef(new Metro());
   const bpmTimerRef    = useRef(null);
   const bpmIntervalRef = useRef(null);
@@ -3583,10 +3592,21 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
         const match = spots.find(s=> Math.abs(s.score_y - scuSpot.y) < 0.15);
         if(match) {
           setSpotId(match.id);
+          if(match.label) setSpotLabel(match.label);
           if(match.start_tempo) setBpm(match.start_tempo);
           if(match.perf_tempo) setPerfTempo(match.perf_tempo);
           if(match.start_tempo) setMaxTempo(match.start_tempo);
         }
+        // Fetch ALL spots for this piece (for tempo overlays)
+        const ar = await sbGet(`/rest/v1/practice_spots?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${scuSpot.piece_id}`);
+        const all = await ar.json()||[];
+        // For each spot, fetch best tempo from logs
+        const lr = await sbGet(`/rest/v1/practice_logs?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${scuSpot.piece_id}&order=session_date.desc`);
+        const logs = await lr.json()||[];
+        setAllSpots(all.map(s=>{
+          const best = logs.filter(l=>l.spot_id===s.id).reduce((mx,l)=>Math.max(mx,l.max_tempo||0),0);
+          return {...s, best_tempo: best||s.start_tempo||0};
+        }));
       } catch(e){ console.error('spot lookup failed', e); }
     })();
   },[]);
@@ -3606,6 +3626,7 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
           score_y: scuSpot?.y??0.5,
           start_tempo: bpm,
           perf_tempo: perfTempo,
+          label: spotLabel.trim()||null,
         });
         const rows = await r.json();
         if(rows?.[0]?.id) setSpotId(rows[0].id);
@@ -3613,6 +3634,7 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
     } else if(spotId) {
       sbPatch(`/rest/v1/practice_spots?id=eq.${spotId}`, {
         start_tempo: bpm, perf_tempo: perfTempo,
+        label: spotLabel.trim()||null,
       }).catch(()=>{});
     }
   };
@@ -3697,6 +3719,15 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
           </div>
 
           <div style={{display:'flex',flexDirection:'column',gap:20}}>
+            <div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
+                letterSpacing:'0.2em',color:C.muted,marginBottom:8}}>SPOT NAME</div>
+              <input type="text" value={spotLabel} onChange={e=>setSpotLabel(e.target.value)}
+                placeholder="e.g. m.32 run, coda, opening"
+                style={{width:'100%',background:C.panel,border:`1px solid ${C.bord}`,color:C.cream,
+                  padding:'10px 12px',fontFamily:"'Inconsolata',monospace",fontSize:'0.95rem'}}/>
+            </div>
+
             <div>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
                 letterSpacing:'0.2em',color:'#3db06a',marginBottom:8}}>STARTING TEMPO</div>
@@ -3827,8 +3858,8 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
 
       {/* Score display — fills remaining space */}
       <div style={{flex:'1 1 0',minHeight:0,background:'#0a0805',display:'flex',position:'relative'}}>
-        {/* Page arrows */}
-        {!showTwo && totalPages>1 && currentPage>0 && (
+        {/* Page arrows — always show when multi-page */}
+        {totalPages>1 && currentPage>0 && (
           <button onClick={()=>setCurrentPage(p=>p-1)} style={{
             position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',zIndex:10,
             background:'rgba(26,22,18,0.7)',border:'none',color:C.cream,fontSize:'1.8rem',
@@ -3836,7 +3867,7 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
             WebkitTapHighlightColor:'transparent',
           }}>‹</button>
         )}
-        {!showTwo && totalPages>1 && currentPage<totalPages-1 && (
+        {totalPages>1 && currentPage<totalPages-1 && !(showTwo && currentPage+2>=totalPages) && (
           <button onClick={()=>setCurrentPage(p=>p+1)} style={{
             position:'absolute',right:0,top:'50%',transform:'translateY(-50%)',zIndex:10,
             background:'rgba(26,22,18,0.7)',border:'none',color:C.cream,fontSize:'1.8rem',
@@ -3845,16 +3876,75 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
           }}>›</button>
         )}
 
+        {/* Show tempos toggle */}
+        <button onClick={()=>setShowTempos(t=>!t)} style={{
+          position:'absolute',top:8,right:8,zIndex:15,
+          background:showTempos?'rgba(61,176,106,0.85)':'rgba(26,22,18,0.8)',
+          border:`1px solid ${showTempos?'#3db06a':C.bord}`,
+          color:showTempos?'white':C.muted,
+          padding:'4px 10px',borderRadius:3,cursor:'pointer',
+          fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+          letterSpacing:'0.1em',
+          WebkitTapHighlightColor:'transparent',
+        }}>{showTempos?'● TEMPOS':'○ TEMPOS'}</button>
+
         <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
           <img src={pageImages[currentPage]}
             style={{width:'100%',height:'100%',objectFit:'contain',display:'block',userSelect:'none'}}
             draggable={false} />
+          {/* Tempo overlays for this page */}
+          {showTempos && allSpots.filter(s=>s.score_page===currentPage).map(s=>{
+            const ox = s.visual_offset_x||0;
+            const oy = s.visual_offset_y||0;
+            const isActive = s.id === spotId;
+            return (
+              <div key={s.id} style={{
+                position:'absolute',
+                left:`${(s.score_x+ox)*100}%`,
+                top:`${(s.score_y+oy)*100}%`,
+                transform:'translate(-50%,-120%)',
+                background:isActive?'rgba(61,176,106,0.88)':'rgba(26,22,18,0.85)',
+                border:`1px solid ${isActive?'#3db06a':'#666'}`,
+                borderRadius:4,padding:'3px 8px',
+                pointerEvents:'none',zIndex:12,whiteSpace:'nowrap',
+              }}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                  letterSpacing:'0.08em',color:isActive?'white':C.cream,lineHeight:1.2}}>
+                  {s.label ? <span style={{fontSize:'0.6rem',color:isActive?'rgba(255,255,255,0.7)':C.muted}}>{s.label}<br/></span> : null}
+                  {isActive ? bpm : (s.best_tempo||s.start_tempo||'?')} / {s.perf_tempo||'?'}
+                </div>
+              </div>
+            );
+          })}
         </div>
         {showTwo && currentPage+1<totalPages && (
           <div style={{position:'relative',flex:1,minWidth:0,borderLeft:`1px solid ${C.bord}`,overflow:'hidden'}}>
             <img src={pageImages[currentPage+1]}
               style={{width:'100%',height:'100%',objectFit:'contain',display:'block',userSelect:'none'}}
               draggable={false} />
+            {/* Tempo overlays for second page */}
+            {showTempos && allSpots.filter(s=>s.score_page===currentPage+1).map(s=>{
+              const ox = s.visual_offset_x||0;
+              const oy = s.visual_offset_y||0;
+              return (
+                <div key={s.id} style={{
+                  position:'absolute',
+                  left:`${(s.score_x+ox)*100}%`,
+                  top:`${(s.score_y+oy)*100}%`,
+                  transform:'translate(-50%,-120%)',
+                  background:'rgba(26,22,18,0.85)',
+                  border:'1px solid #666',
+                  borderRadius:4,padding:'3px 8px',
+                  pointerEvents:'none',zIndex:12,whiteSpace:'nowrap',
+                }}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                    letterSpacing:'0.08em',color:C.cream,lineHeight:1.2}}>
+                    {s.label ? <span style={{fontSize:'0.6rem',color:C.muted}}>{s.label}<br/></span> : null}
+                    {s.best_tempo||s.start_tempo||'?'} / {s.perf_tempo||'?'}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
