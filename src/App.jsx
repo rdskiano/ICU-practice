@@ -436,6 +436,19 @@ export default function App() {
           onStartSession={()=>setScreen('interleaved-session')}
           locateEx={locateEx}
           onBack={()=>{ setLocateEx(null); setInterleavedSpots([]); setScreen('library'); }}
+          onLaunchStrategy={(strategy, pos)=>{
+            setTapPos(pos);
+            if(strategy==='icu') {
+              setMarkers([]);
+              setScreen('mark');
+            } else if(strategy==='mur') {
+              setSavedExercise(null);
+              setScreen('mur');
+            } else if(strategy==='scu') {
+              setScuSpot({page:pos.page,x:pos.x,y:pos.y,piece_id:piece?.id||null});
+              setScreen('scu');
+            }
+          }}
           onTapPassage={async (pos)=>{
             if(locateEx) {
               setTapPos(pos);
@@ -1079,8 +1092,8 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
                   {dayLogs.map(l => {
                     const p = pieces.find(p=>String(p.id)===String(l.piece_id));
                     const sp = spots.find(s=>s.id===l.spot_id);
-                    const pct = (l.perf_tempo && l.start_tempo && l.max_tempo && l.perf_tempo > l.start_tempo)
-                      ? Math.round(((l.max_tempo - l.start_tempo) / (l.perf_tempo - l.start_tempo)) * 100)
+                    const pct = (l.perf_tempo && l.max_tempo)
+                      ? Math.round((l.max_tempo / l.perf_tempo) * 100)
                       : null;
                     return (
                       <div key={l.id} style={{padding:'12px 14px',borderBottom:`1px solid ${C.bord}`,
@@ -1123,17 +1136,19 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
 ═══════════════════════════════════════════════════════════════════════ */
 function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   sessionMode, setSessionMode, interleavedSpots, onRemoveSpot, onBpmChange, onStartSession,
-  locateEx, onBack, onTapPassage, profile }) {
+  locateEx, onBack, onTapPassage, onLaunchStrategy, profile }) {
 
   const land = useOrientation();
   const totalPages = pageImages.length;
   const showTwo = land && totalPages > 1;
   const rightPage = currentPage + 1 < totalPages ? currentPage + 1 : null;
   const [showHint, setShowHint] = useState(true);
-  const [showDots, setShowDots] = useState(false);
+  const [showDots, setShowDots] = useState(true);
 
-  // Practice spots with log summaries
+  // Practice spots with per-strategy log summaries
   const [practiceSpots, setPracticeSpots] = useState([]);
+  const [spotLogs, setSpotLogs] = useState([]); // all logs for this piece
+  const [spotModal, setSpotModal] = useState(null); // spot object for detail modal
   const [draggingSpot, setDraggingSpot] = useState(null);
   const dragStartRef = useRef(null);
 
@@ -1143,17 +1158,24 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
       try {
         const sr = await sbGet(`/rest/v1/practice_spots?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${piece.id}`);
         const spots = await sr.json()||[];
-        if(!spots.length) { setPracticeSpots([]); return; }
-        // Fetch logs to compute progress per spot
-        const lr = await sbGet(`/rest/v1/practice_logs?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${piece.id}&order=session_date.desc`);
+        if(!spots.length) { setPracticeSpots([]); setSpotLogs([]); return; }
+        const lr = await sbGet(`/rest/v1/practice_logs?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${piece.id}&order=session_date.desc,created_at.desc`);
         const logs = await lr.json()||[];
+        setSpotLogs(logs);
         const merged = spots.map(s => {
-          const spotLogs = logs.filter(l=>l.spot_id===s.id);
-          const bestTempo = spotLogs.reduce((mx,l)=>Math.max(mx,l.max_tempo||0),0);
-          const pct = (s.perf_tempo && s.start_tempo && bestTempo && s.perf_tempo > s.start_tempo)
-            ? Math.round(((bestTempo - s.start_tempo) / (s.perf_tempo - s.start_tempo)) * 100) : null;
-          return { ...s, best_tempo: bestTempo, pct_complete: pct,
-            total_sessions: spotLogs.length, last_practiced: spotLogs[0]?.session_date||null };
+          const sl = logs.filter(l=>l.spot_id===s.id);
+          const strategies = {};
+          sl.forEach(l=>{
+            const st = l.strategy||'other';
+            if(!strategies[st]) strategies[st] = {logs:[], best_tempo:0, last_date:null};
+            strategies[st].logs.push(l);
+            if(l.max_tempo && l.max_tempo > strategies[st].best_tempo) strategies[st].best_tempo = l.max_tempo;
+            if(!strategies[st].last_date) strategies[st].last_date = l.session_date;
+          });
+          // SCU pct: best_tempo / perf_tempo * 100
+          const scuBest = strategies.scu?.best_tempo || 0;
+          const scuPct = (s.perf_tempo && scuBest) ? Math.min(100, Math.round((scuBest / s.perf_tempo) * 100)) : null;
+          return { ...s, strategies, total_sessions: sl.length, scu_best: scuBest, scu_pct: scuPct };
         });
         setPracticeSpots(merged);
       } catch(e) { console.error('spot fetch failed', e); }
@@ -1526,38 +1548,55 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               onSelect={id=>setSelectedSpotId(id)}
             />
           ))}
-          {/* Practice log dots */}
+          {/* Practice strategy dots */}
           {showDots && !isInterleaved && !locateEx && practiceSpots.filter(s=>s.score_page===currentPage).map(spot=>{
             const ox = spot.visual_offset_x||0;
             const oy = spot.visual_offset_y||0;
-            const pct = spot.pct_complete!=null ? Math.min(100,Number(spot.pct_complete)) : null;
-            const color = pct===null ? '#4a9eff' : pct>=100 ? '#3db06a' : pct>=50 ? '#e5a835' : C.accent;
-            const isDragging = draggingSpot === spot.id;
-            return (
-              <div key={spot.id}
+            const strats = Object.keys(spot.strategies||{});
+            const dotDefs = [];
+            const offsets = strats.length===1?[0]:strats.length===2?[-8,8]:[-14,0,14];
+            strats.forEach((st,i)=>{
+              const xOff = offsets[i]||0;
+              if(st==='icu') dotDefs.push({key:`${spot.id}-icu`,st,color:C.accent,xOff,label:null});
+              else if(st==='mur') dotDefs.push({key:`${spot.id}-mur`,st,color:C.gold,xOff,label:null});
+              else if(st==='scu') {
+                const best = spot.scu_best||0;
+                const goal = spot.perf_tempo||0;
+                dotDefs.push({key:`${spot.id}-scu`,st,color:'#3db06a',xOff,
+                  label: goal ? `${best}/${goal}` : null});
+              }
+            });
+            if(dotDefs.length===0) return null;
+            return dotDefs.map(d=>(
+              <div key={d.key}
+                onClick={e=>{e.stopPropagation();setSpotModal(spot);}}
                 onTouchStart={e=>handleDotDragStart(e,spot)}
                 onTouchMove={handleDotDragMove}
                 onTouchEnd={handleDotDragEnd}
-                onMouseDown={e=>handleDotDragStart(e,spot)}
-                onClick={e=>{e.stopPropagation();
-                  onTapPassage({page:spot.score_page,x:spot.score_x,y:spot.score_y});}}
+                onMouseDown={e=>{if(e.detail>0)handleDotDragStart(e,spot);}}
                 style={{
                   position:'absolute',
-                  left:`${(spot.score_x+ox)*100}%`,
+                  left:`calc(${(spot.score_x+ox)*100}% + ${d.xOff}px)`,
                   top:`${(spot.score_y+oy)*100}%`,
                   transform:'translate(-50%,-50%)',
-                  width:isDragging?20:14, height:isDragging?20:14,
-                  borderRadius:'50%',
-                  background:color, border:'2px solid white',
-                  boxShadow:`0 1px 4px rgba(0,0,0,0.5)${isDragging?',0 0 0 4px rgba(255,255,255,0.3)':''}`,
-                  cursor:'pointer', zIndex:isDragging?30:15,
-                  transition:isDragging?'none':'width 0.15s,height 0.15s',
+                  cursor:'pointer',zIndex:15,
                   WebkitTapHighlightColor:'transparent',
                   touchAction:'none',
-                }}
-                title={spot.label||`${spot.total_sessions||0} sessions`}
-              />
-            );
+                  ...(d.label ? {
+                    background:'rgba(61,176,106,0.9)',border:'1.5px solid white',
+                    borderRadius:4,padding:'1px 5px',
+                  } : {
+                    width:14,height:14,borderRadius:'50%',
+                    background:d.color,border:'2px solid white',
+                  }),
+                  boxShadow:'0 1px 4px rgba(0,0,0,0.5)',
+                }}>
+                {d.label && (
+                  <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',
+                    color:'white',letterSpacing:'0.04em',lineHeight:1.2,whiteSpace:'nowrap'}}>{d.label}</span>
+                )}
+              </div>
+            ));
           })}
         </div>
         {showTwo && rightPage!==null && (
@@ -1572,6 +1611,121 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
           </div>
         )}
       </div>
+
+      {/* Spot detail modal */}
+      {spotModal && (
+        <>
+          <div onClick={()=>setSpotModal(null)} style={{
+            position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.55)'}}/>
+          <div style={{
+            position:'fixed',left:'50%',top:'50%',transform:'translate(-50%,-50%)',
+            zIndex:401,background:C.ink,border:`1px solid ${C.bord}`,
+            borderRadius:8,padding:0,width:'min(380px,90vw)',maxHeight:'70vh',
+            boxShadow:'0 8px 40px rgba(0,0,0,0.8)',display:'flex',flexDirection:'column',
+            overflow:'hidden',
+          }}>
+            {/* Header */}
+            <div style={{padding:'14px 18px',borderBottom:`1px solid ${C.bord}`,
+              display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+              <div>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
+                  letterSpacing:'0.12em',color:C.cream}}>
+                  {spotModal.label||'PRACTICE SPOT'}
+                </div>
+                <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',
+                  color:C.muted,marginTop:2}}>
+                  {spotModal.total_sessions||0} session{spotModal.total_sessions!==1?'s':''}
+                  {spotModal.perf_tempo ? ` · goal: ♩ = ${spotModal.perf_tempo}` : ''}
+                </div>
+              </div>
+              <button onClick={()=>setSpotModal(null)} style={{
+                background:'none',border:'none',color:C.muted,cursor:'pointer',
+                fontSize:'1.2rem',padding:'0 4px',flexShrink:0}}>✕</button>
+            </div>
+
+            {/* Log entries */}
+            <div style={{flex:'1 1 0',overflowY:'auto',padding:'0 0 8px',
+              WebkitOverflowScrolling:'touch'}}>
+              {(()=>{
+                const sl = spotLogs.filter(l=>l.spot_id===spotModal.id);
+                if(sl.length===0) return (
+                  <div style={{padding:'24px 18px',fontFamily:"'Cormorant Garamond',serif",
+                    fontStyle:'italic',fontSize:'1rem',color:C.muted,textAlign:'center'}}>
+                    No practice sessions at this spot yet.
+                  </div>
+                );
+                const now = Date.now();
+                const relDate = (d) => {
+                  if(!d) return '';
+                  const diff = Math.floor((now - new Date(d+'T12:00:00').getTime()) / 86400000);
+                  if(diff===0) return 'today';
+                  if(diff===1) return '1 day ago';
+                  if(diff<7) return `${diff} days ago`;
+                  if(diff<30) return `${Math.floor(diff/7)} week${Math.floor(diff/7)>1?'s':''} ago`;
+                  return `${Math.floor(diff/30)} month${Math.floor(diff/30)>1?'s':''} ago`;
+                };
+                const stratColor = s => s==='icu'?C.accent:s==='mur'?C.gold:s==='scu'?'#3db06a':'#4a9eff';
+                return sl.map(l=>(
+                  <div key={l.id} style={{padding:'10px 18px',
+                    borderBottom:`1px solid ${C.bord}`,display:'flex',gap:10,alignItems:'flex-start'}}>
+                    <div style={{width:8,height:8,borderRadius:'50%',marginTop:5,flexShrink:0,
+                      background:stratColor(l.strategy)}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+                        letterSpacing:'0.1em',color:stratColor(l.strategy)}}>
+                        {(l.strategy||'practice').toUpperCase()}
+                        <span style={{color:C.muted,marginLeft:8,fontSize:'0.75rem',
+                          fontFamily:"'Inconsolata',monospace",letterSpacing:0}}>
+                          {relDate(l.session_date)}
+                        </span>
+                      </div>
+                      <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.78rem',
+                        color:C.muted,marginTop:2}}>
+                        {l.start_tempo && l.max_tempo ? `♩ ${l.start_tempo} → ${l.max_tempo}` : ''}
+                        {l.perf_tempo ? ` (goal: ${l.perf_tempo})` : ''}
+                        {l.reps_clean ? ` · ${l.reps_clean} clean` : ''}
+                        {l.notes ? ` · ${l.notes}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+
+            {/* Strategy launch buttons */}
+            <div style={{padding:'12px 18px',borderTop:`1px solid ${C.bord}`,flexShrink:0,
+              display:'flex',gap:8}}>
+              <button onClick={()=>{
+                const pos={page:spotModal.score_page,x:spotModal.score_x,y:spotModal.score_y};
+                setSpotModal(null);onLaunchStrategy('icu',pos);
+              }} style={{
+                flex:1,padding:'10px 0',background:C.accent,border:'none',color:'white',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+                letterSpacing:'0.1em',cursor:'pointer',
+                WebkitTapHighlightColor:'transparent',
+              }}>ICU</button>
+              <button onClick={()=>{
+                const pos={page:spotModal.score_page,x:spotModal.score_x,y:spotModal.score_y};
+                setSpotModal(null);onLaunchStrategy('mur',pos);
+              }} style={{
+                flex:1,padding:'10px 0',background:C.gold,border:'none',color:'white',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+                letterSpacing:'0.1em',cursor:'pointer',
+                WebkitTapHighlightColor:'transparent',
+              }}>RV</button>
+              <button onClick={()=>{
+                const pos={page:spotModal.score_page,x:spotModal.score_x,y:spotModal.score_y};
+                setSpotModal(null);onLaunchStrategy('scu',pos);
+              }} style={{
+                flex:1,padding:'10px 0',background:'#3db06a',border:'none',color:'white',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+                letterSpacing:'0.1em',cursor:'pointer',
+                WebkitTapHighlightColor:'transparent',
+              }}>SCU</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1741,6 +1895,15 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
     advance(updated);
   };
 
+  const completedCount=spots.filter(s=>s.checks>=5).length;
+  const land = useOrientation();
+  const totalPages=pageImages.length;
+  const showTwo = land && totalPages > 1;
+  const rightPage = currentPage+1 < totalPages ? currentPage+1 : null;
+  const spotsOnPage=spots.filter(s=>s.page===currentPage);
+  const spotsOnRight=showTwo&&rightPage!==null?spots.filter(s=>s.page===rightPage):[];
+  const verdictBg=flash==='pass'?'rgba(61,176,106,0.14)':flash==='fail'?'rgba(229,53,53,0.12)':'transparent';
+
   if(done) return (
     <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0,
       alignItems:'center',justifyContent:'center',background:C.ink,gap:20,padding:32}}>
@@ -1754,15 +1917,6 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
       <Btn big onClick={onBack}>← BACK TO SCORE</Btn>
     </div>
   );
-
-  const completedCount=spots.filter(s=>s.checks>=5).length;
-  const land = useOrientation();
-  const totalPages=pageImages.length;
-  const showTwo = land && totalPages > 1;
-  const rightPage = currentPage+1 < totalPages ? currentPage+1 : null;
-  const spotsOnPage=spots.filter(s=>s.page===currentPage);
-  const spotsOnRight=showTwo&&rightPage!==null?spots.filter(s=>s.page===rightPage):[];
-  const verdictBg=flash==='pass'?'rgba(61,176,106,0.14)':flash==='fail'?'rgba(229,53,53,0.12)':'transparent';
 
   return (
     <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0,background:C.ink}}>
@@ -3629,9 +3783,17 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
         if(match) {
           setSpotId(match.id);
           if(match.label) setSpotLabel(match.label);
-          if(match.start_tempo) setBpm(match.start_tempo);
           if(match.perf_tempo) setPerfTempo(match.perf_tempo);
-          if(match.start_tempo) setMaxTempo(match.start_tempo);
+          // Check for last SCU session to resume at last max tempo
+          const logR = await sbGet(`/rest/v1/practice_logs?spot_id=eq.${match.id}&strategy=eq.scu&order=created_at.desc&limit=1`);
+          const lastLog = (await logR.json()||[])[0];
+          if(lastLog?.max_tempo) {
+            setBpm(lastLog.max_tempo);
+            setMaxTempo(lastLog.max_tempo);
+          } else if(match.start_tempo) {
+            setBpm(match.start_tempo);
+            setMaxTempo(match.start_tempo);
+          }
         }
         // Fetch ALL spots for this piece (for tempo overlays)
         const ar = await sbGet(`/rest/v1/practice_spots?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${scuSpot.piece_id}`);
@@ -3721,7 +3883,7 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
     onDone();
   };
 
-  const pct = (perfTempo > bpm) ? Math.round(((maxTempo - (bpm <= maxTempo ? bpm : maxTempo)) / (perfTempo - (bpm <= maxTempo ? bpm : maxTempo || 1))) * 100) : null;
+  const pct = perfTempo ? Math.min(100, Math.round((maxTempo / perfTempo) * 100)) : null;
 
   const adjustBpm = delta => setBpm(b=>Math.max(20,Math.min(300,b+delta)));
   const adjustPerf = delta => setPerfTempo(b=>Math.max(20,Math.min(400,b+delta)));
@@ -3829,7 +3991,7 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
     }}/>
   ));
 
-  const progressPct = perfTempo > bpm ? Math.min(100, Math.round(((maxTempo - bpm) / (perfTempo - bpm)) * 100)) : (maxTempo >= perfTempo ? 100 : 0);
+  const progressPct = perfTempo > 0 ? Math.min(100, Math.round((maxTempo / perfTempo) * 100)) : 0;
 
   return (
     <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
@@ -4084,8 +4246,8 @@ function SpotLogScreen({ profile, piece, tapPos, onBack }) {
           </div>
         )}
         {!loading && logs.map(l=>{
-          const pct = (l.perf_tempo && l.start_tempo && l.max_tempo && l.perf_tempo > l.start_tempo)
-            ? Math.min(100, Math.round(((l.max_tempo - l.start_tempo) / (l.perf_tempo - l.start_tempo)) * 100))
+          const pct = (l.perf_tempo && l.max_tempo)
+            ? Math.min(100, Math.round((l.max_tempo / l.perf_tempo) * 100))
             : null;
           return (
             <div key={l.id} style={{padding:'14px 4px',borderBottom:`1px solid ${C.bord}`,
