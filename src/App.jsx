@@ -1373,6 +1373,39 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const showTwo = land && totalPages > 1;
   const rightPage = currentPage + 1 < totalPages ? currentPage + 1 : null;
   const [showSessionPicker, setShowSessionPicker] = useState(true);
+  // Timer mode
+  const [timerTotal, setTimerTotal] = useState(null); // seconds
+  const [timerLeft, setTimerLeft] = useState(null);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [showTimerPicker, setShowTimerPicker] = useState(false);
+  const timerRef = useRef(null);
+
+  useEffect(()=>{
+    if(!timerRunning || timerLeft==null) return;
+    if(timerLeft <= 0) {
+      setTimerRunning(false);
+      // Play alert tone
+      try {
+        const ctx = new (window.AudioContext||window.webkitAudioContext)();
+        [0, 0.3, 0.6].forEach(t => {
+          const o = ctx.createOscillator(), g = ctx.createGain();
+          o.connect(g); g.connect(ctx.destination);
+          o.frequency.value = 880; g.gain.value = 0.3;
+          o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.15);
+        });
+      } catch(e){}
+      if(navigator.vibrate) navigator.vibrate([200,100,200,100,200]);
+      return;
+    }
+    timerRef.current = setTimeout(()=>setTimerLeft(prev=>prev-1), 1000);
+    return ()=>clearTimeout(timerRef.current);
+  },[timerRunning, timerLeft]);
+
+  const fmtTimer = (s) => {
+    const m = Math.floor(s/60), sec = s%60;
+    return `${m}:${sec<10?'0':''}${sec}`;
+  };
+
   // Practice spots with per-strategy log summaries
   const [practiceSpots, setPracticeSpots] = useState([]);
   const [draggingSpot, setDraggingSpot] = useState(null);
@@ -1739,6 +1772,27 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 </div>
               </button>
 
+              {/* Timer */}
+              <button onClick={()=>{
+                setSessionMode('massed');
+                setShowSessionPicker(false);
+                setShowChrome(false);
+                setShowTimerPicker(true);
+              }} style={{
+                padding:'16px 20px',background:'#fff',
+                border:'2px solid #34a853',borderRadius:12,
+                cursor:'pointer',textAlign:'left',width:'100%',
+                WebkitTapHighlightColor:'transparent',
+                display:'flex',flexDirection:'column',gap:4,
+              }}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.15rem',
+                  letterSpacing:'0.1em',color:'#34a853'}}>TIMER</div>
+                <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                  fontSize:'1rem',color:'#666',lineHeight:1.4}}>
+                  Set a timer and practice freely until it goes off
+                </div>
+              </button>
+
               {/* Memorization */}
               <div style={{
                 padding:'16px 20px',background:'#fafafa',
@@ -1774,6 +1828,136 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
       )}
 
       {/* Score — fills entire screen, behind everything */}
+
+      {/* Timer picker modal */}
+      {showTimerPicker && (
+        <>
+          <div onClick={()=>setShowTimerPicker(false)} style={{
+            position:'absolute',inset:0,zIndex:50,background:'rgba(0,0,0,0.25)'}}/>
+          <div style={{
+            position:'absolute',left:'50%',top:'50%',transform:'translate(-50%,-50%)',
+            zIndex:51,background:'#fff',borderRadius:16,
+            width:'min(360px,85vw)',
+            boxShadow:'0 12px 48px rgba(0,0,0,0.15)',
+            display:'flex',flexDirection:'column',overflow:'hidden',
+          }}>
+            <div style={{padding:'20px 24px 12px',textAlign:'center'}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',
+                letterSpacing:'0.12em',color:'#1a1a1a'}}>
+                SET TIMER
+              </div>
+            </div>
+            <div style={{padding:'0 16px 20px',display:'flex',flexWrap:'wrap',gap:10,justifyContent:'center'}}>
+              {[5,10,15,20,30,45,60].map(min=>(
+                <button key={min} onClick={()=>{
+                  setTimerTotal(min*60);
+                  setTimerLeft(min*60);
+                  setTimerRunning(true);
+                  setShowTimerPicker(false);
+                  setShowChrome(true);
+                }} style={{
+                  width:72,height:72,borderRadius:12,
+                  background:'#fff',border:'2px solid #34a853',
+                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.6rem',
+                  letterSpacing:'0.05em',color:'#34a853',
+                  cursor:'pointer',WebkitTapHighlightColor:'transparent',
+                  display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+                }}>
+                  <span>{min}</span>
+                  <span style={{fontSize:'0.6rem',letterSpacing:'0.1em',color:'#888'}}>MIN</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Timer countdown bar */}
+      {timerLeft != null && timerLeft > 0 && (
+        <div style={{
+          position:'absolute',bottom:0,left:0,right:0,zIndex:30,
+          background:'rgba(255,255,255,0.95)',backdropFilter:'blur(8px)',
+          WebkitBackdropFilter:'blur(8px)',
+          borderTop:'1px solid rgba(0,0,0,0.1)',
+          padding:'10px 20px',
+          display:'flex',alignItems:'center',gap:12,
+        }}>
+          {/* progress bar */}
+          <div style={{flex:1,height:4,background:'#e0e0e0',borderRadius:2,overflow:'hidden'}}>
+            <div style={{
+              height:'100%',background:'#34a853',borderRadius:2,
+              width:`${((timerTotal-timerLeft)/timerTotal)*100}%`,
+              transition:'width 1s linear',
+            }}/>
+          </div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.5rem',
+            letterSpacing:'0.05em',color:timerLeft<=60?C.accent:'#34a853',minWidth:60,textAlign:'right'}}>
+            {fmtTimer(timerLeft)}
+          </div>
+          <button onClick={()=>{
+            if(timerRunning) { setTimerRunning(false); }
+            else { setTimerRunning(true); }
+          }} style={{
+            background:'none',border:`1px solid #ccc`,borderRadius:8,
+            padding:'4px 12px',fontFamily:"'Bebas Neue',sans-serif",
+            fontSize:'0.75rem',letterSpacing:'0.08em',color:'#666',
+            cursor:'pointer',WebkitTapHighlightColor:'transparent',
+          }}>{timerRunning?'PAUSE':'RESUME'}</button>
+          <button onClick={()=>{
+            setTimerLeft(null); setTimerTotal(null); setTimerRunning(false);
+          }} style={{
+            background:'none',border:`1px solid #ccc`,borderRadius:8,
+            padding:'4px 10px',fontFamily:"'Bebas Neue',sans-serif",
+            fontSize:'0.75rem',letterSpacing:'0.08em',color:'#999',
+            cursor:'pointer',WebkitTapHighlightColor:'transparent',
+          }}>✕</button>
+        </div>
+      )}
+
+      {/* Timer done overlay */}
+      {timerLeft != null && timerLeft <= 0 && (
+        <div style={{
+          position:'absolute',inset:0,zIndex:60,
+          background:'rgba(0,0,0,0.5)',
+          display:'flex',alignItems:'center',justifyContent:'center',
+        }}>
+          <div style={{
+            background:'#fff',borderRadius:16,padding:'32px 40px',
+            textAlign:'center',boxShadow:'0 12px 48px rgba(0,0,0,0.2)',
+            maxWidth:'85vw',
+          }}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'2rem',
+              letterSpacing:'0.12em',color:'#34a853',marginBottom:8}}>
+              TIME'S UP
+            </div>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+              fontSize:'1.1rem',color:'#666',marginBottom:20}}>
+              {Math.round(timerTotal/60)} minute{timerTotal>60?'s':''} completed
+            </div>
+            <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+              <button onClick={()=>{
+                setTimerLeft(null); setTimerTotal(null);
+              }} style={{
+                padding:'10px 24px',borderRadius:10,
+                background:'#f0f0f0',border:'none',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+                letterSpacing:'0.1em',color:'#666',cursor:'pointer',
+              }}>DONE</button>
+              <button onClick={()=>{
+                setTimerLeft(timerTotal);
+                setTimerRunning(true);
+              }} style={{
+                padding:'10px 24px',borderRadius:10,
+                background:'#34a853',border:'none',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+                letterSpacing:'0.1em',color:'#fff',cursor:'pointer',
+              }}>RESTART</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Score page content */}
       <div data-score-container style={{position:'absolute',inset:0,display:'flex'}}>
         <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
           <img data-page={currentPage} src={pageImages[currentPage]}
@@ -1881,7 +2065,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 letterSpacing:'0.08em',padding:'6px 12px',borderRadius:6,
                 background:'#f0f0f0',color:'#666',border:`1px solid #ddd`,
                 cursor:'pointer',WebkitTapHighlightColor:'transparent',
-              }}>{isInterleaved ? 'INTERLEAVED' : 'BLOCKED'} ▾</button>
+              }}>{isInterleaved ? 'INTERLEAVED' : (timerLeft!=null ? 'TIMER' : 'BLOCKED')} ▾</button>
               {isInterleaved && (
                 <button onClick={onStartSession} disabled={interleavedSpots.length<3} style={{
                   fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
