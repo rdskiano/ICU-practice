@@ -631,7 +631,7 @@ export default function App() {
                   nearby = allSpots.filter(s => Math.abs(s.score_y - pos.y) < 0.20);
                 } catch(e) { console.error('spot check failed', e); }
               }
-              setSpotSetup({tapPos:pos, nearby});
+              setSpotSetup({tapPos:pos, nearby, screenX: pos.screenX||0, screenY: pos.screenY||0});
               const region = pos.y < 0.33 ? 'top' : pos.y < 0.66 ? 'middle' : 'bottom';
               setSpotName(`Page ${pos.page+1}, ${region}`);
             }
@@ -639,105 +639,116 @@ export default function App() {
         />
       )}
 
-      {/* Spot setup — name new spot or pick existing */}
-      {spotSetup && (
-        <>
-          <div onClick={()=>setSpotSetup(null)} style={{
-            position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.25)'}}/>
-          <div style={{
-            position:'fixed',left:'50%',bottom:0,transform:'translateX(-50%)',
-            zIndex:401,background:'#fff',borderTop:`1px solid ${C.bord}`,
-            borderRadius:'16px 16px 0 0',
-            width:'min(420px,100vw)',maxHeight:'60vh',
-            boxShadow:'0 -4px 24px rgba(0,0,0,0.12)',
-            display:'flex',flexDirection:'column',overflow:'hidden',
-          }}>
-            <div style={{display:'flex',justifyContent:'center',padding:'10px 0 0'}}>
-              <div style={{width:40,height:4,borderRadius:2,background:'#ddd'}}/>
-            </div>
-
-            {/* New spot name input */}
-            <div style={{padding:'12px 20px 8px'}}>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
-                letterSpacing:'0.12em',color:'#1a1a1a'}}>
-                NAME THIS SPOT
-              </div>
-              <input type="text" value={spotName} onChange={e=>setSpotName(e.target.value)}
-                placeholder="e.g. m.32 run, opening phrase, coda..."
-                autoFocus
-                style={{
-                  width:'100%',padding:'12px 14px',borderRadius:10,marginTop:8,
-                  border:'1.5px solid #ddd',fontFamily:"'Cormorant Garamond',serif",
-                  fontSize:'1.05rem',color:'#1a1a1a',outline:'none',boxSizing:'border-box',
-                }}
-                onFocus={e=>{e.target.style.borderColor=C.accent}}
-                onBlur={e=>{e.target.style.borderColor='#ddd'}}
-                onKeyDown={e=>{if(e.key==='Enter' && spotName.trim()){
-                  setSpotSetup(null);
-                  setSelectedSpot(null);
-                  setTapPos({...spotSetup.tapPos, label:spotName.trim()});
-                  setShowOverlay(true);
-                }}}
-              />
-              <button onClick={()=>{
-                if(spotName.trim()){
-                  setSpotSetup(null);
-                  setSelectedSpot(null);
-                  setTapPos({...spotSetup.tapPos, label:spotName.trim()});
-                  setShowOverlay(true);
-                }
-              }} style={{
-                width:'100%',marginTop:8,padding:'12px',borderRadius:10,
-                background:spotName.trim()?C.accent:'#e0e0e0',border:'none',
-                fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
-                letterSpacing:'0.1em',color:spotName.trim()?'#fff':'#999',
-                cursor:spotName.trim()?'pointer':'default',
-              }}>CHOOSE STRATEGY →</button>
-            </div>
-
-            {/* Existing spots nearby */}
-            {spotSetup.nearby.length > 0 && (
-              <div style={{padding:'4px 20px 16px'}}>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.8rem',
-                  letterSpacing:'0.1em',color:'#999',marginBottom:8}}>
-                  OR SELECT AN EXISTING SPOT
-                </div>
-                <div style={{display:'flex',flexDirection:'column',gap:6,
-                  maxHeight:'25vh',overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
-                  {spotSetup.nearby.map(sp=>(
-                    <button key={sp.id} onClick={()=>{
-                      setSpotSetup(null);
-                      setSelectedSpot(sp);
-                      setTapPos({page:sp.score_page, x:sp.score_x, y:sp.score_y});
-                      setShowOverlay(true);
-                    }} style={{
-                      display:'flex',alignItems:'center',gap:12,
-                      padding:'12px 14px',background:'#fafafa',
-                      border:`1px solid ${C.bord}`,borderRadius:10,
-                      cursor:'pointer',textAlign:'left',width:'100%',
-                      WebkitTapHighlightColor:'transparent',
-                    }}>
-                      <div style={{flex:1}}>
-                        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
-                          letterSpacing:'0.08em',color:'#1a1a1a'}}>
-                          {sp.label || 'Unlabeled spot'}
-                        </div>
-                        {sp.perf_tempo && (
-                          <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',
-                            color:'#999',marginTop:2}}>
-                            goal: ♩ = {sp.perf_tempo}
+      {/* Spot setup — popover near tap */}
+      {spotSetup && (()=>{
+        const vh = window.innerHeight;
+        const vw = window.innerWidth;
+        const popW = Math.min(320, vw * 0.85);
+        let left = Math.min(Math.max(spotSetup.screenX - popW/2, 8), vw - popW - 8);
+        let top = spotSetup.screenY + 12;
+        if(top + 200 > vh) top = Math.max(8, spotSetup.screenY - 220);
+        return (
+          <>
+            <div onClick={()=>setSpotSetup(null)} style={{
+              position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.15)'}}/>
+            <div style={{
+              position:'fixed',left,top,
+              zIndex:401,background:'#fff',
+              borderRadius:14,
+              width:popW,
+              boxShadow:'0 8px 32px rgba(0,0,0,0.18)',
+              display:'flex',flexDirection:'column',overflow:'hidden',
+              maxHeight: vh * 0.5,
+            }}>
+              {/* Existing spots nearby — shown first */}
+              {spotSetup.nearby.length > 0 && (
+                <div style={{padding:'12px 16px 8px'}}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
+                    letterSpacing:'0.1em',color:'#999',marginBottom:6}}>
+                    SELECT A SPOT
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:5,
+                    maxHeight:'30vh',overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+                    {spotSetup.nearby.map(sp=>(
+                      <button key={sp.id} onClick={()=>{
+                        setSpotSetup(null);
+                        setSelectedSpot(sp);
+                        setTapPos({page:sp.score_page, x:sp.score_x, y:sp.score_y, label:sp.label});
+                        setShowOverlay(true);
+                      }} style={{
+                        display:'flex',alignItems:'center',gap:10,
+                        padding:'10px 12px',background:'#fafafa',
+                        border:`1.5px solid ${C.bord}`,borderRadius:10,
+                        cursor:'pointer',textAlign:'left',width:'100%',
+                        WebkitTapHighlightColor:'transparent',
+                      }}>
+                        <div style={{flex:1}}>
+                          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.95rem',
+                            letterSpacing:'0.06em',color:'#1a1a1a'}}>
+                            {sp.label || 'Unlabeled spot'}
                           </div>
-                        )}
-                      </div>
-                      <span style={{color:'#ccc',fontSize:'1.2rem'}}>›</span>
-                    </button>
-                  ))}
+                          {sp.perf_tempo && (
+                            <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',
+                              color:'#999',marginTop:1}}>♩ = {sp.perf_tempo}</div>
+                          )}
+                        </div>
+                        <span style={{color:'#ccc',fontSize:'1rem'}}>›</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* New spot */}
+              <div style={{padding: spotSetup.nearby.length > 0 ? '4px 16px 12px' : '12px 16px',
+                borderTop: spotSetup.nearby.length > 0 ? `1px solid #f0f0f0` : 'none'}}>
+                {spotSetup.nearby.length > 0 && (
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
+                    letterSpacing:'0.1em',color:'#999',marginBottom:6}}>
+                    OR NAME A NEW SPOT
+                  </div>
+                )}
+                {spotSetup.nearby.length === 0 && (
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+                    letterSpacing:'0.1em',color:'#1a1a1a',marginBottom:6}}>
+                    NAME THIS SPOT
+                  </div>
+                )}
+                <div style={{display:'flex',gap:6}}>
+                  <input type="text" value={spotName} onChange={e=>setSpotName(e.target.value)}
+                    placeholder="e.g. m.32 run"
+                    style={{
+                      flex:1,padding:'10px 12px',borderRadius:8,
+                      border:'1.5px solid #ddd',fontFamily:"'Cormorant Garamond',serif",
+                      fontSize:'1rem',color:'#1a1a1a',outline:'none',boxSizing:'border-box',
+                    }}
+                    onFocus={e=>{e.target.style.borderColor=C.accent}}
+                    onBlur={e=>{e.target.style.borderColor='#ddd'}}
+                    onKeyDown={e=>{if(e.key==='Enter' && spotName.trim()){
+                      setSpotSetup(null); setSelectedSpot(null);
+                      setTapPos({...spotSetup.tapPos, label:spotName.trim()});
+                      setShowOverlay(true);
+                    }}}
+                  />
+                  <button onClick={()=>{
+                    if(spotName.trim()){
+                      setSpotSetup(null); setSelectedSpot(null);
+                      setTapPos({...spotSetup.tapPos, label:spotName.trim()});
+                      setShowOverlay(true);
+                    }
+                  }} style={{
+                    padding:'10px 14px',borderRadius:8,
+                    background:spotName.trim()?C.accent:'#e0e0e0',border:'none',
+                    fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+                    letterSpacing:'0.08em',color:spotName.trim()?'#fff':'#999',
+                    cursor:spotName.trim()?'pointer':'default',flexShrink:0,
+                  }}>GO →</button>
                 </div>
               </div>
-            )}
-          </div>
-        </>
-      )}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Strategy overlay — massed mode only */}
       {screen==='score' && showOverlay && !locateEx && sessionMode!=='interleaved' && (
@@ -1433,8 +1444,13 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
                                           {l.start_tempo && l.max_tempo ? `♩ ${l.start_tempo} → ${l.max_tempo}` : ''}
                                           {l.perf_tempo ? ` (goal: ${l.perf_tempo})` : ''}
                                           {l.reps_clean ? ` · ${l.reps_clean} clean` : ''}
-                                          {l.notes ? ` · ${l.notes}` : ''}
                                         </div>
+                                        {l.notes && (
+                                          <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                                            fontSize:'0.95rem',color:'#888',marginTop:3,lineHeight:1.4}}>
+                                            {l.notes}
+                                          </div>
+                                        )}
                                       </div>
                                       {pct !== null && (
                                         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.3rem',
@@ -1673,28 +1689,16 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
     return ()=>{ document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
   },[draggingSpot, handleDotDragEnd]);
   const isInterleaved = sessionMode === 'interleaved';
-  const [showChrome, setShowChrome] = useState(isInterleaved || !!locateEx);
+  const [showChrome, setShowChrome] = useState(true);
   const longPressRef = useRef(null);
   const touchRef = useRef({startX:0, startY:0, startTime:0, moved:false, longFired:false});
   const touchHandled = useRef(false); // prevent click after touch
 
   const handleTouchStart = (e) => {
-    e.preventDefault(); // prevent native long-press image save
+    e.preventDefault();
     touchHandled.current = true;
     const t = e.touches[0];
     touchRef.current = {startX:t.clientX, startY:t.clientY, startTime:Date.now(), moved:false, longFired:false};
-    if(!isInterleaved && !locateEx) {
-      const img = e.currentTarget;
-      longPressRef.current = setTimeout(()=>{
-        touchRef.current.longFired = true;
-        if(navigator.vibrate) navigator.vibrate(30);
-        const rect = img.getBoundingClientRect();
-        const x = (touchRef.current.startX - rect.left) / rect.width;
-        const y = (touchRef.current.startY - rect.top) / rect.height;
-        const page = img.dataset.page ? parseInt(img.dataset.page) : currentPage;
-        onTapPassage({page, x, y});
-      }, 500);
-    }
   };
 
   const handleTouchMove = (e) => {
@@ -1703,17 +1707,16 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
     const dy = Math.abs(t.clientY - touchRef.current.startY);
     if(dx > 10 || dy > 10) {
       touchRef.current.moved = true;
-      clearTimeout(longPressRef.current);
     }
   };
 
   const handleTouchEnd = (e) => {
-    clearTimeout(longPressRef.current);
     if(touchRef.current.longFired) return;
     const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
     const dx = endX - touchRef.current.startX;
     const elapsed = Date.now() - touchRef.current.startTime;
-    // Swipe detection — works in all modes
+    // Swipe detection — navigate pages
     if(Math.abs(dx) > 60 && elapsed < 400) {
       if(dx < 0 && currentPage < totalPages - 1) setCurrentPage(p=> showTwo ? p+2 : p+1);
       if(dx > 0 && currentPage > 0) setCurrentPage(p=> showTwo ? Math.max(0,p-2) : p-1);
@@ -1721,27 +1724,26 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
     }
     // Quick tap
     if(!touchRef.current.moved && elapsed < 300) {
-      const screenW = window.innerWidth;
-      const tapX = endX;
-      const edgeZone = screenW * 0.15;
-      // Edge taps turn pages in ALL modes
-      if(tapX < edgeZone && currentPage > 0) {
-        setCurrentPage(p=> showTwo ? Math.max(0,p-2) : p-1);
-      } else if(tapX > screenW - edgeZone && currentPage < totalPages - 1) {
-        setCurrentPage(p=> showTwo ? Math.min(totalPages-1, p+2) : p+1);
-      } else if(isInterleaved || locateEx) {
-        // Center tap in interleaved/locate = place spot
+      if(isInterleaved || locateEx) {
+        // Tap in interleaved/locate = place spot
         const img = e.target.closest('img');
         if(img) {
           const rect = img.getBoundingClientRect();
-          const x = (tapX - rect.left) / rect.width;
-          const y = (e.changedTouches[0].clientY - rect.top) / rect.height;
+          const x = (endX - rect.left) / rect.width;
+          const y = (endY - rect.top) / rect.height;
           const page = img.dataset.page ? parseInt(img.dataset.page) : currentPage;
           onTapPassage({page, x, y});
         }
       } else {
-        // Center tap in blocked = toggle chrome
-        setShowChrome(c=>!c);
+        // Blocked mode: tap = select spot
+        const img = e.target.closest('img');
+        if(img) {
+          const rect = img.getBoundingClientRect();
+          const x = (endX - rect.left) / rect.width;
+          const y = (endY - rect.top) / rect.height;
+          const page = img.dataset.page ? parseInt(img.dataset.page) : currentPage;
+          onTapPassage({page, x, y, screenX: endX, screenY: endY});
+        }
       }
     }
   };
@@ -1749,15 +1751,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   // Mouse click for desktop
   const handleClick = (e) => {
     if(touchHandled.current) { touchHandled.current = false; return; }
-    const screenW = window.innerWidth;
-    const tapX = e.clientX;
-    const edgeZone = screenW * 0.15;
-    if(tapX < edgeZone && currentPage > 0) {
-      setCurrentPage(p=> showTwo ? Math.max(0,p-2) : p-1);
-    } else if(tapX > screenW - edgeZone && currentPage < totalPages - 1) {
-      setCurrentPage(p=> showTwo ? Math.min(totalPages-1, p+2) : p+1);
-    } else if(isInterleaved || locateEx) {
-      // Place spot
+    if(isInterleaved || locateEx) {
       const img = e.target.closest('img');
       if(img) {
         const rect = img.getBoundingClientRect();
@@ -1767,7 +1761,15 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         onTapPassage({page, x, y});
       }
     } else {
-      setShowChrome(c=>!c);
+      // Blocked mode: select spot
+      const img = e.target.closest('img');
+      if(img) {
+        const rect = img.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+        const page = img.dataset.page ? parseInt(img.dataset.page) : currentPage;
+        onTapPassage({page, x, y, screenX: e.clientX, screenY: e.clientY});
+      }
     }
   };
 
@@ -2330,7 +2332,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             {!locateEx && !isInterleaved && (
               <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
                 fontSize:'0.8rem',color:'#999',marginTop:-1}}>
-                Long tap a spot to practice
+                Tap a spot to practice
               </div>
             )}
           </div>
