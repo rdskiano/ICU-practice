@@ -1883,7 +1883,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               <button onClick={()=>{
                 setSessionMode('massed');
                 setShowSessionPicker(false);
-                setShowChrome(false);
+                setShowChrome(true);
               }} style={{
                 padding:'16px 20px',background:'#fff',
                 border:`2px solid ${C.accent}`,borderRadius:12,
