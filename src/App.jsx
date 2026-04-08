@@ -389,6 +389,7 @@ export default function App() {
   const [locateResult,setLocateResult] = useState(null); // 'ok' | 'fail' | error string
   const [scuSpot,setScuSpot]           = useState(null); // spot data for Slow Click Up
   const [spotPicker,setSpotPicker]     = useState(null); // {nearby:[], tapPos:{}}
+  const [selectedSpot,setSelectedSpot] = useState(null); // spot object from picker
   const N = markers.length;
 
   const saveProf = p => { setProfile(p); setProfileState(p); };
@@ -578,6 +579,7 @@ export default function App() {
                 <button key={sp.id} onClick={()=>{
                   const pos = {page:sp.score_page, x:sp.score_x, y:sp.score_y};
                   setSpotPicker(null);
+                  setSelectedSpot(sp);
                   setTapPos(pos);
                   setShowOverlay(true);
                 }} style={{
@@ -611,6 +613,7 @@ export default function App() {
               ))}
               <button onClick={()=>{
                 setSpotPicker(null);
+                setSelectedSpot(null);
                 setTapPos(spotPicker.tapPos);
                 setShowOverlay(true);
               }} style={{
@@ -636,7 +639,8 @@ export default function App() {
           piece={piece}
           profile={profile}
           tapPos={tapPos}
-          onClose={()=>setShowOverlay(false)}
+          selectedSpot={selectedSpot}
+          onClose={()=>{setShowOverlay(false);setSelectedSpot(null);}}
           onICU={()=>{
             setShowOverlay(false);
             setMarkers([]);
@@ -2304,7 +2308,7 @@ function ExerciseCard({ ex, confirmDelete, setConfirmDelete, deleting, onDelete,
 /* ═══════════════════════════════════════════════════════════════════════
    STRATEGY OVERLAY — floating panel over score
 ═══════════════════════════════════════════════════════════════════════ */
-function StrategyOverlay({ piece, profile, tapPos, onClose, onICU, onRV, onSCU, onViewLog }) {
+function StrategyOverlay({ piece, profile, tapPos, selectedSpot, onClose, onICU, onRV, onSCU, onViewLog }) {
   const [panel, setPanel] = useState('strategies');
   const [nearby, setNearby] = useState([]);
   const [unlocated, setUnlocated] = useState([]);
@@ -2323,16 +2327,20 @@ function StrategyOverlay({ piece, profile, tapPos, onClose, onICU, onRV, onSCU, 
       const all = await r.json() || [];
 
       const nb = [], ul = [];
+      // Use tight matching when a specific spot was selected
+      const matchY = selectedSpot ? 0.05 : 0.12;
+      const refY = selectedSpot ? selectedSpot.score_y : (tapPos?.y||0);
+      const refPage = selectedSpot ? selectedSpot.score_page : tapPos?.page;
+
       all.forEach(ex => {
         const hasLocation = ex.score_page != null || ex.score_y != null;
         if(!hasLocation) {
           ul.push(ex);
           return;
         }
-        // Has location — check if it matches this tap
         if(ex.piece_id && piece?.id && String(ex.piece_id) !== String(piece.id)) return;
-        const samePage = parseInt(ex.score_page) === tapPos?.page;
-        const closeY = Math.abs(parseFloat(ex.score_y) - (tapPos?.y||0)) < 0.20;
+        const samePage = parseInt(ex.score_page) === refPage;
+        const closeY = Math.abs(parseFloat(ex.score_y) - refY) < matchY;
         if(samePage && closeY) nb.push(ex);
       });
 
