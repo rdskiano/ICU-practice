@@ -1896,6 +1896,127 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         </>
       )}
 
+      {/* Rotation mode picker */}
+      {showIntroModal && (
+        <>
+          <div onClick={()=>{setShowIntroModal(false);if(!interleavedMode)setSessionMode('massed');}} style={{
+            position:'absolute',inset:0,zIndex:50,background:'rgba(0,0,0,0.3)'}}/>
+          <div style={{
+            position:'absolute',left:'50%',top:'50%',
+            transform:'translate(-50%,-50%)',
+            zIndex:51,background:'#fff',
+            borderRadius:16,padding:'24px',
+            width:'min(400px, 90vw)',
+            boxShadow:'0 12px 48px rgba(0,0,0,0.2)',
+            display:'flex',flexDirection:'column',gap:14,
+          }}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.3rem',
+              letterSpacing:'0.12em',color:'#4a9eff',textAlign:'center'}}>
+              HOW DO YOU WANT TO ROTATE?
+            </div>
+            {/* Timed */}
+            <div style={{
+              padding:'16px 20px',
+              background: interleavedMode==='timed' ? 'rgba(74,158,255,0.06)' : '#fff',
+              border: `2px solid ${interleavedMode==='timed' ? '#4a9eff' : '#e0e0e0'}`,
+              borderRadius:12,display:'flex',flexDirection:'column',gap:8,
+            }}>
+              <button onClick={()=>{setInterleavedMode('timed');setInterleavedValue(3);}} style={{
+                background:'none',border:'none',textAlign:'left',cursor:'pointer',
+                padding:0,WebkitTapHighlightColor:'transparent',
+              }}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
+                  letterSpacing:'0.1em',color:'#4a9eff'}}>TIMED ROTATION</div>
+                <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                  fontSize:'0.95rem',color:'#666',lineHeight:1.4,marginTop:2}}>
+                  Practice freely, switch when time's up
+                </div>
+              </button>
+              {interleavedMode==='timed' && (
+                <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                  <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:'0.95rem',color:'#888'}}>Switch every</span>
+                  {[3,5,10,15].map(v=>(
+                    <button key={v} onClick={()=>setInterleavedValue(v)} style={{
+                      width:38,height:32,borderRadius:8,
+                      background: interleavedValue===v ? '#4a9eff' : '#f5f5f5',
+                      color: interleavedValue===v ? '#fff' : '#666',
+                      border: `1px solid ${interleavedValue===v ? '#4a9eff' : '#ddd'}`,
+                      fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+                      cursor:'pointer',WebkitTapHighlightColor:'transparent',
+                    }}>{v}</button>
+                  ))}
+                  <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:'0.95rem',color:'#888'}}>min</span>
+                </div>
+              )}
+            </div>
+            {/* Consistency Goal */}
+            <div style={{
+              padding:'16px 20px',
+              background: interleavedMode==='consistency' ? 'rgba(74,158,255,0.06)' : '#fff',
+              border: `2px solid ${interleavedMode==='consistency' ? '#4a9eff' : '#e0e0e0'}`,
+              borderRadius:12,display:'flex',flexDirection:'column',gap:8,
+            }}>
+              <button onClick={()=>{setInterleavedMode('consistency');setInterleavedValue(5);}} style={{
+                background:'none',border:'none',textAlign:'left',cursor:'pointer',
+                padding:0,WebkitTapHighlightColor:'transparent',
+              }}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
+                  letterSpacing:'0.1em',color:'#4a9eff'}}>CONSISTENCY GOAL</div>
+                <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                  fontSize:'0.95rem',color:'#666',lineHeight:1.4,marginTop:2}}>
+                  Move on after getting it right X times in a row
+                </div>
+              </button>
+              {interleavedMode==='consistency' && (
+                <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                  <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:'0.95rem',color:'#888'}}>Correct in a row</span>
+                  {[3,5,7,10].map(v=>(
+                    <button key={v} onClick={()=>setInterleavedValue(v)} style={{
+                      width:38,height:32,borderRadius:8,
+                      background: interleavedValue===v ? '#4a9eff' : '#f5f5f5',
+                      color: interleavedValue===v ? '#fff' : '#666',
+                      border: `1px solid ${interleavedValue===v ? '#4a9eff' : '#ddd'}`,
+                      fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+                      cursor:'pointer',WebkitTapHighlightColor:'transparent',
+                    }}>{v}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={()=>{if(interleavedMode) setShowIntroModal(false);}} style={{
+              padding:'12px 0',
+              background: interleavedMode ? '#4a9eff' : '#e0e0e0',
+              border:'none',color: interleavedMode ? 'white' : '#999',
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+              letterSpacing:'0.12em',cursor: interleavedMode ? 'pointer' : 'default',
+              borderRadius:10,WebkitTapHighlightColor:'transparent',
+            }}>PLACE SPOTS ON SCORE →</button>
+          </div>
+        </>
+      )}
+
+      {/* Floating placement instructions */}
+      {isInterleaved && !showIntroModal && interleavedSpots.length < 3 && (
+        <div style={{
+          position:'absolute',bottom:20,left:'50%',transform:'translateX(-50%)',
+          zIndex:30,background:'rgba(255,255,255,0.95)',
+          backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',
+          borderRadius:14,padding:'14px 22px',
+          boxShadow:'0 4px 24px rgba(0,0,0,0.12)',
+          border:'1px solid rgba(74,158,255,0.2)',
+          maxWidth:'min(340px,85vw)',textAlign:'center',
+        }}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+            letterSpacing:'0.1em',color:'#4a9eff',marginBottom:4}}>
+            {interleavedSpots.length === 0 ? 'TAP YOUR SCORE TO PLACE SPOTS' : `${interleavedSpots.length} OF 3+ SPOTS PLACED`}
+          </div>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+            fontSize:'0.95rem',color:'#888',lineHeight:1.4}}>
+            Tap near each passage you want to practice. Place at least 3 spots, up to 7.
+          </div>
+        </div>
+      )}
+
       {/* Score — fills entire screen, behind everything */}
 
       {/* Timer picker modal */}
@@ -2289,136 +2410,6 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             display:'flex',alignItems:'center',justifyContent:'center',
             WebkitTapHighlightColor:'transparent',borderRadius:3,
           }}>?</button>
-
-          {/* Intro modal */}
-          {showIntroModal && (
-            <>
-              <div onClick={()=>{setShowIntroModal(false);if(!interleavedMode)setSessionMode('massed');}} style={{
-                position:'absolute',inset:0,zIndex:49,background:'rgba(0,0,0,0.3)'}}/>
-              <div style={{
-                position:'absolute',left:'50%',top:'50%',
-                transform:'translate(-50%,-50%)',
-                zIndex:50,background:'#fff',
-                borderRadius:16,padding:'24px',
-                width:'min(400px, 90vw)',
-                boxShadow:'0 12px 48px rgba(0,0,0,0.2)',
-                display:'flex',flexDirection:'column',gap:14,
-              }}>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.3rem',
-                  letterSpacing:'0.12em',color:'#4a9eff',textAlign:'center'}}>
-                  HOW DO YOU WANT TO ROTATE?
-                </div>
-
-                {/* Timed */}
-                <div style={{
-                  padding:'16px 20px',
-                  background: interleavedMode==='timed' ? 'rgba(74,158,255,0.06)' : '#fff',
-                  border: `2px solid ${interleavedMode==='timed' ? '#4a9eff' : '#e0e0e0'}`,
-                  borderRadius:12,display:'flex',flexDirection:'column',gap:8,
-                }}>
-                  <button onClick={()=>{setInterleavedMode('timed');setInterleavedValue(3);}} style={{
-                    background:'none',border:'none',textAlign:'left',cursor:'pointer',
-                    padding:0,WebkitTapHighlightColor:'transparent',
-                  }}>
-                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
-                      letterSpacing:'0.1em',color:'#4a9eff'}}>TIMED ROTATION</div>
-                    <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-                      fontSize:'0.95rem',color:'#666',lineHeight:1.4,marginTop:2}}>
-                      Practice freely, switch when time's up
-                    </div>
-                  </button>
-                  {interleavedMode==='timed' && (
-                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                      <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:'0.95rem',color:'#888'}}>
-                        Switch every
-                      </span>
-                      {[3,5,10,15].map(v=>(
-                        <button key={v} onClick={()=>setInterleavedValue(v)} style={{
-                          width:38,height:32,borderRadius:8,
-                          background: interleavedValue===v ? '#4a9eff' : '#f5f5f5',
-                          color: interleavedValue===v ? '#fff' : '#666',
-                          border: `1px solid ${interleavedValue===v ? '#4a9eff' : '#ddd'}`,
-                          fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
-                          cursor:'pointer',WebkitTapHighlightColor:'transparent',
-                        }}>{v}</button>
-                      ))}
-                      <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:'0.95rem',color:'#888'}}>min</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Consistency Goal */}
-                <div style={{
-                  padding:'16px 20px',
-                  background: interleavedMode==='consistency' ? 'rgba(74,158,255,0.06)' : '#fff',
-                  border: `2px solid ${interleavedMode==='consistency' ? '#4a9eff' : '#e0e0e0'}`,
-                  borderRadius:12,display:'flex',flexDirection:'column',gap:8,
-                }}>
-                  <button onClick={()=>{setInterleavedMode('consistency');setInterleavedValue(5);}} style={{
-                    background:'none',border:'none',textAlign:'left',cursor:'pointer',
-                    padding:0,WebkitTapHighlightColor:'transparent',
-                  }}>
-                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
-                      letterSpacing:'0.1em',color:'#4a9eff'}}>CONSISTENCY GOAL</div>
-                    <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-                      fontSize:'0.95rem',color:'#666',lineHeight:1.4,marginTop:2}}>
-                      Move on after getting it right X times in a row
-                    </div>
-                  </button>
-                  {interleavedMode==='consistency' && (
-                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                      <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:'0.95rem',color:'#888'}}>
-                        Correct in a row
-                      </span>
-                      {[3,5,7,10].map(v=>(
-                        <button key={v} onClick={()=>setInterleavedValue(v)} style={{
-                          width:38,height:32,borderRadius:8,
-                          background: interleavedValue===v ? '#4a9eff' : '#f5f5f5',
-                          color: interleavedValue===v ? '#fff' : '#666',
-                          border: `1px solid ${interleavedValue===v ? '#4a9eff' : '#ddd'}`,
-                          fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
-                          cursor:'pointer',WebkitTapHighlightColor:'transparent',
-                        }}>{v}</button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <button onClick={()=>{
-                  if(interleavedMode) setShowIntroModal(false);
-                }} style={{
-                  padding:'12px 0',
-                  background: interleavedMode ? '#4a9eff' : '#e0e0e0',
-                  border:'none',color: interleavedMode ? 'white' : '#999',
-                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
-                  letterSpacing:'0.12em',cursor: interleavedMode ? 'pointer' : 'default',
-                  borderRadius:10,WebkitTapHighlightColor:'transparent',
-                }}>PLACE SPOTS ON SCORE →</button>
-              </div>
-            </>
-          )}
-
-          {/* Floating placement instructions */}
-          {isInterleaved && !showIntroModal && interleavedSpots.length < 3 && (
-            <div style={{
-              position:'absolute',bottom:20,left:'50%',transform:'translateX(-50%)',
-              zIndex:30,background:'rgba(255,255,255,0.95)',
-              backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',
-              borderRadius:14,padding:'14px 22px',
-              boxShadow:'0 4px 24px rgba(0,0,0,0.12)',
-              border:'1px solid rgba(74,158,255,0.2)',
-              maxWidth:'min(340px,85vw)',textAlign:'center',
-            }}>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
-                letterSpacing:'0.1em',color:'#4a9eff',marginBottom:4}}>
-                {interleavedSpots.length === 0 ? 'TAP YOUR SCORE TO PLACE SPOTS' : `${interleavedSpots.length} OF 3+ SPOTS PLACED`}
-              </div>
-              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-                fontSize:'0.95rem',color:'#888',lineHeight:1.4}}>
-                Tap near each passage you want to practice. Place at least 3 spots, up to 7.
-              </div>
-            </div>
-          )}
 
         </div>
       )}
