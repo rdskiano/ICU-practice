@@ -1826,7 +1826,8 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const [promptSpotId,  setPromptSpotId]    = useState(null); // Y/N tempo dialog
   const [metroWaiting,  setMetroWaiting]    = useState(false); // metro bar glow
   const [showIntroModal, setShowIntroModal] = useState(false);
-  const [showTempoTrackers, setShowTempoTrackers] = useState(false); // instructions on mode switch
+  const [showTempoTrackers, setShowTempoTrackers] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(()=>!localStorage.getItem('pfn_hideScoreInstructions')); // instructions on mode switch
   const placeMetro = useRef(new Metro());
   const bpmTimerRef    = useRef(null);
   const bpmIntervalRef = useRef(null);
@@ -2076,6 +2077,36 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
       )}
 
       {/* Score — fills entire screen, behind everything */}
+
+      {/* Instruction card — blocked mode */}
+      {showInstructions && !isInterleaved && !locateEx && !showSessionPicker && !spotSetup && !showOverlay && (
+        <div style={{
+          position:'absolute',bottom:20,left:'50%',transform:'translateX(-50%)',
+          zIndex:30,background:'rgba(255,255,255,0.97)',
+          backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',
+          borderRadius:14,padding:'16px 20px',
+          boxShadow:'0 4px 24px rgba(0,0,0,0.12)',
+          border:'1px solid rgba(0,0,0,0.08)',
+          maxWidth:'min(360px,88vw)',textAlign:'center',
+        }}>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",
+            fontSize:'1.05rem',color:'#555',lineHeight:1.5}}>
+            Tap the beginning of a passage to practice. Name the spot to save exercises and update your practice journal.
+          </div>
+          <div style={{display:'flex',gap:8,justifyContent:'center',marginTop:12}}>
+            <button onClick={()=>setShowInstructions(false)} style={{
+              padding:'8px 18px',borderRadius:8,background:'#f0f0f0',border:'none',
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+              letterSpacing:'0.08em',color:'#666',cursor:'pointer',
+            }}>OK</button>
+            <button onClick={()=>{setShowInstructions(false);localStorage.setItem('pfn_hideScoreInstructions','1');}} style={{
+              padding:'8px 18px',borderRadius:8,background:'transparent',border:'none',
+              fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+              fontSize:'0.85rem',color:'#aaa',cursor:'pointer',
+            }}>Don't show again</button>
+          </div>
+        </div>
+      )}
 
       {/* Timer picker modal */}
       {showTimerPicker && (
@@ -2358,16 +2389,10 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             </>)}
           </div>
           <div style={{textAlign:'center',flex:1,minWidth:0}}>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',
               letterSpacing:'0.12em',color:'#1a1a1a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
               {locateEx ? 'LOCATE EXERCISE' : (piece?.title||'SCORE')}
             </div>
-            {!locateEx && !isInterleaved && (
-              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-                fontSize:'0.8rem',color:'#999',marginTop:-1}}>
-                Tap a spot to practice
-              </div>
-            )}
           </div>
           <div style={{display:'flex',gap:4,alignItems:'center',justifyContent:'flex-end'}}>
             {!locateEx && (
