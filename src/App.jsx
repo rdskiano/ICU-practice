@@ -1524,26 +1524,25 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const touchHandled = useRef(false); // prevent click after touch
 
   const handleTouchStart = (e) => {
-    if(isInterleaved || locateEx) return;
     e.preventDefault(); // prevent native long-press image save
     touchHandled.current = true;
     const t = e.touches[0];
     touchRef.current = {startX:t.clientX, startY:t.clientY, startTime:Date.now(), moved:false, longFired:false};
-    const img = e.currentTarget;
-    longPressRef.current = setTimeout(()=>{
-      touchRef.current.longFired = true;
-      // Vibrate feedback if available
-      if(navigator.vibrate) navigator.vibrate(30);
-      const rect = img.getBoundingClientRect();
-      const x = (touchRef.current.startX - rect.left) / rect.width;
-      const y = (touchRef.current.startY - rect.top) / rect.height;
-      const page = img.dataset.page ? parseInt(img.dataset.page) : currentPage;
-      onTapPassage({page, x, y});
-    }, 500);
+    if(!isInterleaved && !locateEx) {
+      const img = e.currentTarget;
+      longPressRef.current = setTimeout(()=>{
+        touchRef.current.longFired = true;
+        if(navigator.vibrate) navigator.vibrate(30);
+        const rect = img.getBoundingClientRect();
+        const x = (touchRef.current.startX - rect.left) / rect.width;
+        const y = (touchRef.current.startY - rect.top) / rect.height;
+        const page = img.dataset.page ? parseInt(img.dataset.page) : currentPage;
+        onTapPassage({page, x, y});
+      }, 500);
+    }
   };
 
   const handleTouchMove = (e) => {
-    if(isInterleaved || locateEx) return;
     const t = e.touches[0];
     const dx = Math.abs(t.clientX - touchRef.current.startX);
     const dy = Math.abs(t.clientY - touchRef.current.startY);
@@ -1554,36 +1553,46 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   };
 
   const handleTouchEnd = (e) => {
-    if(isInterleaved || locateEx) return;
     clearTimeout(longPressRef.current);
     if(touchRef.current.longFired) return;
     const endX = e.changedTouches[0].clientX;
     const dx = endX - touchRef.current.startX;
     const elapsed = Date.now() - touchRef.current.startTime;
-    // Swipe detection
+    // Swipe detection — works in all modes
     if(Math.abs(dx) > 60 && elapsed < 400) {
       if(dx < 0 && currentPage < totalPages - 1) setCurrentPage(p=> showTwo ? p+2 : p+1);
       if(dx > 0 && currentPage > 0) setCurrentPage(p=> showTwo ? Math.max(0,p-2) : p-1);
       return;
     }
-    // Quick tap — check edges for page turn, center for chrome toggle
+    // Quick tap
     if(!touchRef.current.moved && elapsed < 300) {
       const screenW = window.innerWidth;
       const tapX = endX;
       const edgeZone = screenW * 0.15;
+      // Edge taps turn pages in ALL modes
       if(tapX < edgeZone && currentPage > 0) {
         setCurrentPage(p=> showTwo ? Math.max(0,p-2) : p-1);
       } else if(tapX > screenW - edgeZone && currentPage < totalPages - 1) {
         setCurrentPage(p=> showTwo ? Math.min(totalPages-1, p+2) : p+1);
+      } else if(isInterleaved || locateEx) {
+        // Center tap in interleaved/locate = place spot
+        const img = e.target.closest('img');
+        if(img) {
+          const rect = img.getBoundingClientRect();
+          const x = (tapX - rect.left) / rect.width;
+          const y = (e.changedTouches[0].clientY - rect.top) / rect.height;
+          const page = img.dataset.page ? parseInt(img.dataset.page) : currentPage;
+          onTapPassage({page, x, y});
+        }
       } else {
+        // Center tap in blocked = toggle chrome
         setShowChrome(c=>!c);
       }
     }
   };
 
-  // Mouse click for desktop only (not iPad)
+  // Mouse click for desktop
   const handleClick = (e) => {
-    if(isInterleaved || locateEx) return;
     if(touchHandled.current) { touchHandled.current = false; return; }
     const screenW = window.innerWidth;
     const tapX = e.clientX;
@@ -1592,6 +1601,16 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
       setCurrentPage(p=> showTwo ? Math.max(0,p-2) : p-1);
     } else if(tapX > screenW - edgeZone && currentPage < totalPages - 1) {
       setCurrentPage(p=> showTwo ? Math.min(totalPages-1, p+2) : p+1);
+    } else if(isInterleaved || locateEx) {
+      // Place spot
+      const img = e.target.closest('img');
+      if(img) {
+        const rect = img.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+        const page = img.dataset.page ? parseInt(img.dataset.page) : currentPage;
+        onTapPassage({page, x, y});
+      }
     } else {
       setShowChrome(c=>!c);
     }
@@ -1758,14 +1777,10 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
       <div data-score-container style={{position:'absolute',inset:0,display:'flex'}}>
         <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
           <img data-page={currentPage} src={pageImages[currentPage]}
-            {...(isInterleaved || locateEx ? {
-              onClick: handleLongTap,
-            } : {
-              onTouchStart: handleTouchStart,
-              onTouchMove: handleTouchMove,
-              onTouchEnd: handleTouchEnd,
-              onClick: handleClick,
-            })}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onClick={handleClick}
             style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
               userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none',
               cursor: isInterleaved?'crosshair':'default'}}
@@ -1818,14 +1833,10 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
           <div style={{position:'relative',flex:1,minWidth:0,
             borderLeft:`1px solid ${C.bord}`,overflow:'hidden'}}>
             <img data-page={rightPage} src={pageImages[rightPage]}
-              {...(isInterleaved || locateEx ? {
-                onClick: handleLongTap,
-              } : {
-                onTouchStart: handleTouchStart,
-                onTouchMove: handleTouchMove,
-                onTouchEnd: handleTouchEnd,
-                onClick: handleClick,
-              })}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onClick={handleClick}
               style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
                 userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none',cursor:'default'}}
               onContextMenu={e=>e.preventDefault()}
