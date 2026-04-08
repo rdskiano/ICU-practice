@@ -1917,8 +1917,11 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             timerDragRef.current.moved=true;
             setTimerPos({x:t.clientX-timerDragRef.current.sx, y:t.clientY-timerDragRef.current.sy});
           }}
-          onTouchEnd={()=>{
-            if(timerDragRef.current && !timerDragRef.current.moved) setTimerExpanded(p=>!p);
+          onTouchEnd={(e)=>{
+            if(timerDragRef.current && !timerDragRef.current.moved) {
+              // Only toggle if tap was directly on the pill, not on a child button
+              if(e.target.tagName!=='BUTTON') setTimerExpanded(p=>!p);
+            }
             timerDragRef.current=null;
           }}
           style={{
@@ -1963,7 +1966,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 borderRadius:8,padding:'4px 10px',fontFamily:"'Bebas Neue',sans-serif",
                 fontSize:'0.75rem',letterSpacing:'0.08em',color:'#fff',cursor:'pointer',
                 WebkitTapHighlightColor:'transparent',
-              }}>✕</button>
+              }}>CANCEL</button>
             </div>
           </>)}
         </div>
@@ -2104,26 +2107,40 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             letterSpacing:'0.15em',color:'#1a1a1a',textAlign:'center'}}>
             {locateEx ? 'LOCATE EXERCISE' : (piece?.title||'SCORE')}
           </div>
-          <div style={{display:'flex',gap:4,alignItems:'center',minWidth:80,justifyContent:'flex-end'}}>
-            {!locateEx && (<>
+          <div style={{display:'flex',gap:4,alignItems:'center',justifyContent:'flex-end'}}>
+            {!locateEx && !isInterleaved && (<>
+              {[
+                {key:'scu',label:'SCU',color:C.accent},
+                {key:'icu',label:'ICU',color:'#4a9eff'},
+                {key:'mur',label:'MUR',color:'#9b59b6'},
+              ].map(s=>(
+                <button key={s.key} onClick={()=>onLaunchStrategy(s.key, {page:currentPage, x:0.5, y:0.5})} style={{
+                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',
+                  letterSpacing:'0.06em',padding:'5px 8px',borderRadius:6,
+                  background:'transparent',color:s.color,border:`1.5px solid ${s.color}`,
+                  cursor:'pointer',WebkitTapHighlightColor:'transparent',
+                }}>{s.label}</button>
+              ))}
+            </>)}
+            {!locateEx && (
               <button onClick={()=>setShowSessionPicker(true)} style={{
                 fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
                 letterSpacing:'0.08em',padding:'6px 12px',borderRadius:6,
                 background:'#f0f0f0',color:'#666',border:`1px solid #ddd`,
                 cursor:'pointer',WebkitTapHighlightColor:'transparent',
               }}>{isInterleaved ? 'INTERLEAVED' : (timerLeft!=null ? 'TIMER' : 'BLOCKED')} ▾</button>
-              {isInterleaved && (
-                <button onClick={onStartSession} disabled={interleavedSpots.length<3} style={{
-                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
-                  letterSpacing:'0.1em',padding:'7px 14px',borderRadius:6,
-                  background:interleavedSpots.length>=3?'#4a9eff':'transparent',
-                  color:interleavedSpots.length>=3?'white':C.dim,
-                  border:`1px solid ${interleavedSpots.length>=3?'#4a9eff':C.bord}`,
-                  cursor:interleavedSpots.length>=3?'pointer':'not-allowed',
-                  WebkitTapHighlightColor:'transparent',
-                }}>START →</button>
-              )}
-            </>)}
+            )}
+            {isInterleaved && !locateEx && (
+              <button onClick={onStartSession} disabled={interleavedSpots.length<3} style={{
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
+                letterSpacing:'0.1em',padding:'7px 14px',borderRadius:6,
+                background:interleavedSpots.length>=3?'#4a9eff':'transparent',
+                color:interleavedSpots.length>=3?'white':C.dim,
+                border:`1px solid ${interleavedSpots.length>=3?'#4a9eff':C.bord}`,
+                cursor:interleavedSpots.length>=3?'pointer':'not-allowed',
+                WebkitTapHighlightColor:'transparent',
+              }}>START →</button>
+            )}
           </div>
         </div>
       </div>
