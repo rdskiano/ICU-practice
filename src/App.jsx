@@ -597,7 +597,7 @@ export default function App() {
               setScreen('library');
             } else if(sessionMode==='interleaved') {
               setInterleavedSpots(prev=>{
-                if(prev.length>=7) return prev;
+                
                 return [...prev,{id:prev.length+1,page:pos.page,x:pos.x,y:pos.y,checks:0,bpm:null}];
               });
             } else {
@@ -2008,11 +2008,11 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         }}>
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
             letterSpacing:'0.1em',color:'#4a9eff',marginBottom:4}}>
-            {interleavedSpots.length === 0 ? 'TAP YOUR SCORE TO PLACE SPOTS' : `${interleavedSpots.length} OF 3+ SPOTS PLACED`}
+            {interleavedSpots.length === 0 ? 'TAP YOUR SCORE TO PLACE SPOTS' : `${interleavedSpots.length} SPOT${interleavedSpots.length>1?'S':''} PLACED`}
           </div>
           <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
             fontSize:'0.95rem',color:'#888',lineHeight:1.4}}>
-            Tap near each passage you want to practice. Place at least 3 spots, up to 7.
+            Tap near each passage you want to practice.
           </div>
         </div>
       )}
@@ -2201,6 +2201,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               onRemove={onRemoveSpot}
               isSelected={spot.id===selectedSpotId}
               onSelect={id=>setSelectedSpotId(id)}
+              targetChecks={interleavedMode==='timed' ? 999 : (interleavedValue||5)}
             />
           ))}
           {/* SCU tempo indicators */}
@@ -2294,20 +2295,6 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             {locateEx ? 'LOCATE EXERCISE' : (piece?.title||'SCORE')}
           </div>
           <div style={{display:'flex',gap:4,alignItems:'center',justifyContent:'flex-end'}}>
-            {!locateEx && !isInterleaved && (<>
-              {[
-                {key:'scu',label:'SCU',color:C.accent},
-                {key:'icu',label:'ICU',color:'#4a9eff'},
-                {key:'mur',label:'MUR',color:'#9b59b6'},
-              ].map(s=>(
-                <button key={s.key} onClick={()=>onLaunchStrategy(s.key, {page:currentPage, x:0.5, y:0.5})} style={{
-                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',
-                  letterSpacing:'0.06em',padding:'5px 8px',borderRadius:6,
-                  background:'transparent',color:s.color,border:`1.5px solid ${s.color}`,
-                  cursor:'pointer',WebkitTapHighlightColor:'transparent',
-                }}>{s.label}</button>
-              ))}
-            </>)}
             {!locateEx && (
               <button onClick={()=>setShowSessionPicker(true)} style={{
                 fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
@@ -2317,13 +2304,13 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               }}>{isInterleaved ? 'INTERLEAVED' : 'BLOCKED'} ▾</button>
             )}
             {isInterleaved && !locateEx && (
-              <button onClick={onStartSession} disabled={interleavedSpots.length<3} style={{
+              <button onClick={onStartSession} disabled={interleavedSpots.length<1} style={{
                 fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
                 letterSpacing:'0.1em',padding:'7px 14px',borderRadius:6,
-                background:interleavedSpots.length>=3?'#4a9eff':'transparent',
-                color:interleavedSpots.length>=3?'white':C.dim,
-                border:`1px solid ${interleavedSpots.length>=3?'#4a9eff':C.bord}`,
-                cursor:interleavedSpots.length>=3?'pointer':'not-allowed',
+                background:interleavedSpots.length>=1?'#4a9eff':'transparent',
+                color:interleavedSpots.length>=1?'white':C.dim,
+                border:`1px solid ${interleavedSpots.length>=1?'#4a9eff':C.bord}`,
+                cursor:interleavedSpots.length>=1?'pointer':'not-allowed',
                 WebkitTapHighlightColor:'transparent',
               }}>START →</button>
             )}
@@ -2399,7 +2386,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               ? `▶ THEN SET FOR SPOT ${selectedSpotId}`
               : interleavedSpots.length===0
               ? 'TAP SCORE TO PLACE SPOTS (3–7)'
-              : interleavedSpots.length<3
+              : interleavedSpots.length<1
               ? `${interleavedSpots.length} PLACED — NEED ${3-interleavedSpots.length} MORE`
               : `${interleavedSpots.length} SPOTS — TAP TO SELECT, THEN SET TEMPO`}
           </div>
