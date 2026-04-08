@@ -1372,7 +1372,6 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const totalPages = pageImages.length;
   const showTwo = land && totalPages > 1;
   const rightPage = currentPage + 1 < totalPages ? currentPage + 1 : null;
-  const [showHint, setShowHint] = useState(true);
   // Practice spots with per-strategy log summaries
   const [practiceSpots, setPracticeSpots] = useState([]);
   const [draggingSpot, setDraggingSpot] = useState(null);
@@ -1518,15 +1517,73 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
     return ()=>{ document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
   },[draggingSpot, handleDotDragEnd]);
   const isInterleaved = sessionMode === 'interleaved';
+  const [showChrome, setShowChrome] = useState(true);
+  const longPressRef = useRef(null);
+  const touchRef = useRef({startX:0, startY:0, startTime:0, moved:false, longFired:false});
 
-  const handleTap = e => {
+  const handleTouchStart = (e) => {
+    if(isInterleaved || locateEx) return; // interleaved/locate use direct tap
+    const t = e.touches[0];
+    touchRef.current = {startX:t.clientX, startY:t.clientY, startTime:Date.now(), moved:false, longFired:false};
+    // Start long-press timer
+    const img = e.currentTarget;
+    longPressRef.current = setTimeout(()=>{
+      touchRef.current.longFired = true;
+      // Calculate tap position on image
+      const rect = img.getBoundingClientRect();
+      const x = (touchRef.current.startX - rect.left) / rect.width;
+      const y = (touchRef.current.startY - rect.top) / rect.height;
+      const page = img.dataset.page ? parseInt(img.dataset.page) : currentPage;
+      onTapPassage({page, x, y});
+    }, 500);
+  };
+
+  const handleTouchMove = (e) => {
+    if(isInterleaved || locateEx) return;
+    const t = e.touches[0];
+    const dx = Math.abs(t.clientX - touchRef.current.startX);
+    const dy = Math.abs(t.clientY - touchRef.current.startY);
+    if(dx > 10 || dy > 10) {
+      touchRef.current.moved = true;
+      clearTimeout(longPressRef.current);
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if(isInterleaved || locateEx) return;
+    clearTimeout(longPressRef.current);
+    if(touchRef.current.longFired) return; // already handled
+    const endX = e.changedTouches[0].clientX;
+    const dx = endX - touchRef.current.startX;
+    const elapsed = Date.now() - touchRef.current.startTime;
+    // Swipe detection
+    if(Math.abs(dx) > 60 && elapsed < 400) {
+      if(dx < 0 && currentPage < totalPages - 1) setCurrentPage(p=>p+1);
+      if(dx > 0 && currentPage > 0) setCurrentPage(p=>p-1);
+      return;
+    }
+    // Quick tap — toggle chrome
+    if(!touchRef.current.moved && elapsed < 300) {
+      setShowChrome(c=>!c);
+    }
+  };
+
+  // Mouse fallback for desktop
+  const handleClick = (e) => {
+    if(isInterleaved || locateEx) return;
+    // On desktop, single click toggles chrome
+    // Right-click or ctrl-click could open action menu, but for now just toggle
+    setShowChrome(c=>!c);
+  };
+
+  const handleLongTap = (e) => {
     const img = e.currentTarget;
     const rect = img.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top)  / rect.height;
     const page = img.dataset.page ? parseInt(img.dataset.page) : currentPage;
     onTapPassage({ page, x, y });
-  };
+  }; // used for interleaved/locate modes only
 
   const modeBtn = (mode, label) => (
     <button onClick={()=>{
@@ -1580,50 +1637,84 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   };
 
   return (
-    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
-      <TopBar
-        left={<div style={{display:'flex',alignItems:'center',gap:6}}>
-          <BackBtn onClick={onBack} />
-          {!locateEx && !isInterleaved && (
-            <button onClick={()=>{
-              onLaunchStrategy('journal', {page:currentPage, x:0.5, y:0.5});
-            }} style={{
-              background:'#f0f0f0',
-              border:`1px solid #ddd`,
-              color:'#666',
-              padding:'4px 10px',borderRadius:12,
-              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',
-              letterSpacing:'0.08em',cursor:'pointer',
-              WebkitTapHighlightColor:'transparent',
-            }}>📋 JOURNAL</button>
-          )}
-        </div>}
-        center={locateEx ? 'LOCATE EXERCISE' : (piece?.title||'SCORE')}
-        right={locateEx ? null : (
-          <div style={{display:'flex',gap:4,alignItems:'center'}}>
-            {modeBtn('massed','BLOCKED')}
-            {modeBtn('interleaved','INTERLEAVED')}
-            {isInterleaved && (
-              <button onClick={onStartSession} disabled={interleavedSpots.length<3} style={{
-                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
-                letterSpacing:'0.1em',padding:'7px 14px',
-                background:interleavedSpots.length>=3?'#4a9eff':'transparent',
-                color:interleavedSpots.length>=3?'white':C.dim,
-                border:`1px solid ${interleavedSpots.length>=3?'#4a9eff':C.bord}`,
-                cursor:interleavedSpots.length>=3?'pointer':'not-allowed',
+    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0,position:'relative'}}>
+      {/* Chrome overlay — translucent top bar, toggleable */}
+      <div style={{
+        position:'absolute',top:0,left:0,right:0,zIndex:20,
+        transform:showChrome?'translateY(0)':'translateY(-100%)',
+        transition:'transform 0.25s ease',
+        background:'rgba(255,255,255,0.92)',
+        backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
+        borderBottom:`1px solid rgba(0,0,0,0.1)`,
+      }}>
+        <div style={{
+          display:'flex',alignItems:'center',justifyContent:'space-between',
+          padding:'0 14px',height:46,
+        }}>
+          <div style={{display:'flex',alignItems:'center',gap:6,minWidth:80}}>
+            <BackBtn onClick={onBack} />
+            {!locateEx && !isInterleaved && (
+              <button onClick={()=>onLaunchStrategy('journal', {page:currentPage, x:0.5, y:0.5})} style={{
+                background:'rgba(0,0,0,0.06)',border:'none',
+                color:'#666',padding:'4px 10px',borderRadius:12,
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',
+                letterSpacing:'0.08em',cursor:'pointer',
                 WebkitTapHighlightColor:'transparent',
-              }}>START →</button>
+              }}>📋 JOURNAL</button>
             )}
           </div>
-        )}
-      />
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.3rem',
+            letterSpacing:'0.15em',color:'#1a1a1a',textAlign:'center'}}>
+            {locateEx ? 'LOCATE EXERCISE' : (piece?.title||'SCORE')}
+          </div>
+          <div style={{display:'flex',gap:4,alignItems:'center',minWidth:80,justifyContent:'flex-end'}}>
+            {!locateEx && (<>
+              {modeBtn('massed','BLOCKED')}
+              {modeBtn('interleaved','INTERLEAVED')}
+              {isInterleaved && (
+                <button onClick={onStartSession} disabled={interleavedSpots.length<3} style={{
+                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
+                  letterSpacing:'0.1em',padding:'7px 14px',borderRadius:6,
+                  background:interleavedSpots.length>=3?'#4a9eff':'transparent',
+                  color:interleavedSpots.length>=3?'white':C.dim,
+                  border:`1px solid ${interleavedSpots.length>=3?'#4a9eff':C.bord}`,
+                  cursor:interleavedSpots.length>=3?'pointer':'not-allowed',
+                  WebkitTapHighlightColor:'transparent',
+                }}>START →</button>
+              )}
+            </>)}
+          </div>
+        </div>
+      </div>
 
-      {/* Interleaved tempo + status sub-bar */}
+      {/* Bottom chrome — page indicator + long-press hint */}
+      <div style={{
+        position:'absolute',bottom:0,left:0,right:0,zIndex:20,
+        transform:showChrome?'translateY(0)':'translateY(100%)',
+        transition:'transform 0.25s ease',
+        background:'rgba(255,255,255,0.92)',
+        backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
+        borderTop:`1px solid rgba(0,0,0,0.1)`,
+        padding:'8px 16px',
+        display:'flex',alignItems:'center',justifyContent:'space-between',
+      }}>
+        <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.85rem',color:'#666'}}>
+          {totalPages>1 ? `Page ${currentPage+1} of ${totalPages}` : ''}
+        </div>
+        <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+          fontSize:'0.9rem',color:'#999'}}>
+          {isInterleaved ? 'Tap to place spots' : 'Hold to practice a spot · Swipe to turn pages'}
+        </div>
+      </div>
+
+      {/* Interleaved tempo + status sub-bar — always visible, absolute positioned below chrome */}
       {isInterleaved && !locateEx && (
         <div style={{display:'flex',alignItems:'center',gap:8,
           padding:'6px 12px',flexShrink:0,
-          background:'#fff',borderBottom:`1px solid ${C.bord}`,
-          position:'relative'}}>
+          position:'absolute',top:46,left:0,right:0,zIndex:19,
+          background:'rgba(255,255,255,0.95)',borderBottom:`1px solid ${C.bord}`,
+          backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)',
+        }}>
           {/* BPM step buttons + display */}
           {['−','+'].map((lbl,di)=>{
             const props = di===0 ? {
@@ -1739,10 +1830,10 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         </div>
       )}
 
-      {/* Locate mode banner — only shown when locating an exercise */}
+      {/* Locate mode banner */}
       {locateEx && (
         <div style={{padding:'8px 16px',flexShrink:0,borderBottom:`1px solid ${C.bord}`,
-          background:'rgba(154,112,16,0.18)',display:'flex',alignItems:'center',gap:10}}>
+          background:'rgba(154,112,16,0.18)',display:'flex',alignItems:'center',gap:10,zIndex:25}}>
           <span style={{fontSize:'1.1rem'}}>📍</span>
           <div>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
@@ -1753,68 +1844,22 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         </div>
       )}
 
+      {/* Score — fills entire screen */}
       <div data-score-container style={{flex:'1 1 0',minHeight:0,background:'#e8e5e0',display:'flex',position:'relative'}}>
-
-        {/* Floating hint toast — dismissible, only on first view */}
-        {showHint && !locateEx && (
-          <div onClick={()=>setShowHint(false)} style={{
-            position:'absolute',top:16,left:'50%',transform:'translateX(-50%)',
-            zIndex:20,background:'rgba(255,255,255,0.95)',border:`1px solid ${C.bord}`,
-            borderRadius:6,padding:'8px 16px 8px 14px',
-            display:'flex',alignItems:'center',gap:10,
-            boxShadow:'0 4px 20px rgba(0,0,0,0.5)',
-            WebkitTapHighlightColor:'transparent',cursor:'pointer',
-            whiteSpace:'nowrap',
-          }}>
-            <span style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-              fontSize:'1rem',color:C.cream}}>Tap a passage to begin working</span>
-            <span style={{color:C.muted,fontSize:'0.85rem'}}>✕</span>
-          </div>
-        )}
-
-        {/* Left page arrow */}
-        {!showTwo && totalPages>1 && currentPage>0 && (
-          <button onClick={()=>setCurrentPage(p=>p-1)}
-            style={{
-              position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',
-              zIndex:10,background:'rgba(255,255,255,0.85)',border:'none',
-              color:C.cream,fontSize:'1.8rem',padding:'16px 10px',
-              cursor:'pointer',WebkitTapHighlightColor:'transparent',
-              borderRadius:'0 4px 4px 0',
-            }}>‹</button>
-        )}
-
-        {/* Right page arrow */}
-        {!showTwo && totalPages>1 && currentPage<totalPages-1 && (
-          <button onClick={()=>setCurrentPage(p=>p+1)}
-            style={{
-              position:'absolute',right:0,top:'50%',transform:'translateY(-50%)',
-              zIndex:10,background:'rgba(255,255,255,0.85)',border:'none',
-              color:C.cream,fontSize:'1.8rem',padding:'16px 10px',
-              cursor:'pointer',WebkitTapHighlightColor:'transparent',
-              borderRadius:'4px 0 0 4px',
-            }}>›</button>
-        )}
-
-        {/* Page indicator — floating bottom center */}
-        {!showTwo && totalPages>1 && (
-          <div style={{
-            position:'absolute',bottom:12,left:'50%',transform:'translateX(-50%)',
-            zIndex:10,background:'rgba(255,255,255,0.9)',
-            padding:'4px 12px',borderRadius:12,
-            fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.cream,
-            pointerEvents:'none',
-          }}>{currentPage+1} / {totalPages}</div>
-        )}
-
-        {/* Practice history toggle — moved to top bar */}
 
         <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
           <img data-page={currentPage} src={pageImages[currentPage]}
-            onClick={handleTap}
-            style={{width:'100%',height:'95%',objectFit:'contain',display:'block',
+            {...(isInterleaved || locateEx ? {
+              onClick: handleLongTap,
+            } : {
+              onTouchStart: handleTouchStart,
+              onTouchMove: handleTouchMove,
+              onTouchEnd: handleTouchEnd,
+              onClick: handleClick,
+            })}
+            style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
               userSelect:'none',WebkitUserSelect:'none',
-              cursor: isInterleaved?'crosshair':'crosshair'}}
+              cursor: isInterleaved?'crosshair':'default'}}
             onContextMenu={e=>e.preventDefault()}
             draggable={false} />
           {isInterleaved && interleavedSpots.filter(s=>s.page===currentPage).map(spot=>(
@@ -1824,7 +1869,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               onSelect={id=>setSelectedSpotId(id)}
             />
           ))}
-          {/* SCU tempo indicators only */}
+          {/* SCU tempo indicators */}
           {!isInterleaved && !locateEx && practiceSpots.filter(s=>s.score_page===currentPage && s.strategies?.scu).map(spot=>{
             const ox = spot.visual_offset_x||0;
             const oy = spot.visual_offset_y||0;
@@ -1864,9 +1909,16 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
           <div style={{position:'relative',flex:1,minWidth:0,
             borderLeft:`1px solid ${C.bord}`,overflow:'hidden'}}>
             <img data-page={rightPage} src={pageImages[rightPage]}
-              onClick={handleTap}
-              style={{width:'100%',height:'95%',objectFit:'contain',display:'block',
-                userSelect:'none',WebkitUserSelect:'none',cursor:'crosshair'}}
+              {...(isInterleaved || locateEx ? {
+                onClick: handleLongTap,
+              } : {
+                onTouchStart: handleTouchStart,
+                onTouchMove: handleTouchMove,
+                onTouchEnd: handleTouchEnd,
+                onClick: handleClick,
+              })}
+              style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
+                userSelect:'none',WebkitUserSelect:'none',cursor:'default'}}
               onContextMenu={e=>e.preventDefault()}
               draggable={false} />
           </div>
