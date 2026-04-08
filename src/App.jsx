@@ -99,6 +99,14 @@ const range = (a,b) => Array.from({length:b-a},(_,i)=>a+i);
 function getProfile() { try { return JSON.parse(localStorage.getItem('murProfile')||'{}'); } catch { return {}; } }
 function setProfile(p) { localStorage.setItem('murProfile', JSON.stringify(p)); }
 
+// User-facing strategy names
+const STRAT_NAME = {
+  icu: 'Interleaved Click-Up',
+  scu: 'Slow Click-Up',
+  mur: 'Rhythmic Variation',
+};
+const stratName = s => STRAT_NAME[s] || s || 'Practice';
+
 // Find or create a practice_spots record near a tap position
 async function findOrCreateSpot(email, pieceId, tapPos) {
   if(!email || !pieceId || !tapPos) return null;
@@ -1102,7 +1110,7 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.95rem',
                             letterSpacing:'0.08em',color:C.cream}}>
-                            {l.strategy?.toUpperCase()||'PRACTICE'}
+                            {stratName(l.strategy)}
                             {sp?.label ? ` — ${sp.label}` : ''}
                             {p && !sp?.label ? ` — ${p.title}` : ''}
                           </div>
@@ -1157,14 +1165,60 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
     if(!profile?.email || !piece?.id) return;
     (async ()=>{
       try {
-        const sr = await sbGet(`/rest/v1/practice_spots?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${piece.id}`);
+        const [sr, lr, er] = await Promise.all([
+          sbGet(`/rest/v1/practice_spots?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${piece.id}`),
+          sbGet(`/rest/v1/practice_logs?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${piece.id}&order=session_date.desc,created_at.desc`),
+          sbGet(`/rest/v1/exercises?user_email=eq.${encodeURIComponent(profile.email)}&order=created_at.desc&limit=50`),
+        ]);
         const spots = await sr.json()||[];
-        if(!spots.length) { setPracticeSpots([]); setSpotLogs([]); return; }
-        const lr = await sbGet(`/rest/v1/practice_logs?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${piece.id}&order=session_date.desc,created_at.desc`);
         const logs = await lr.json()||[];
+        const exercises = (await er.json()||[]).filter(ex =>
+          String(ex.piece_id)===String(piece.id) && ex.score_page!=null && ex.score_y!=null
+        );
         setSpotLogs(logs);
+
+        // For exercises that don't have a matching spot, create virtual spots
+        const virtualSpots = [];
+        exercises.forEach(ex => {
+          const hasSpot = spots.some(s =>
+            s.score_page === parseInt(ex.score_page) &&
+            Math.abs(s.score_y - parseFloat(ex.score_y)) < 0.15
+          );
+          const hasVirtual = virtualSpots.some(v =>
+            v.score_page === parseInt(ex.score_page) &&
+            Math.abs(v.score_y - parseFloat(ex.score_y)) < 0.15
+          );
+          if(!hasSpot && !hasVirtual) {
+            virtualSpots.push({
+              id: 'ex-'+ex.id,
+              score_page: parseInt(ex.score_page),
+              score_x: 0.5,
+              score_y: parseFloat(ex.score_y),
+              label: ex.doc_name||null,
+              virtual: true,
+              strategies: { mur: { logs:[], best_tempo:0, last_date: ex.created_at?.split('T')[0]||null }},
+              total_sessions: 1,
+              scu_best: 0, scu_pct: null,
+            });
+          }
+        });
+
+        // Also check for orphaned logs (no spot_id) and match by proximity
+        const orphanedLogs = logs.filter(l => !l.spot_id);
+
         const merged = spots.map(s => {
+          // Logs linked by spot_id
           const sl = logs.filter(l=>l.spot_id===s.id);
+          // Also grab orphaned logs near this spot
+          orphanedLogs.forEach(l => {
+            if(sl.some(existing => existing.id === l.id)) return;
+            // Can't match by position without score coords on log, skip
+          });
+          // Check if any exercises are near this spot
+          const nearExercises = exercises.filter(ex =>
+            parseInt(ex.score_page) === s.score_page &&
+            Math.abs(parseFloat(ex.score_y) - s.score_y) < 0.15
+          );
           const strategies = {};
           sl.forEach(l=>{
             const st = l.strategy||'other';
@@ -1173,12 +1227,15 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             if(l.max_tempo && l.max_tempo > strategies[st].best_tempo) strategies[st].best_tempo = l.max_tempo;
             if(!strategies[st].last_date) strategies[st].last_date = l.session_date;
           });
-          // SCU pct: best_tempo / perf_tempo * 100
+          // Add MUR strategy if nearby exercises exist but no mur logs
+          if(nearExercises.length > 0 && !strategies.mur) {
+            strategies.mur = { logs:[], best_tempo:0, last_date: nearExercises[0].created_at?.split('T')[0]||null };
+          }
           const scuBest = strategies.scu?.best_tempo || 0;
           const scuPct = (s.perf_tempo && scuBest) ? Math.min(100, Math.round((scuBest / s.perf_tempo) * 100)) : null;
           return { ...s, strategies, total_sessions: sl.length, scu_best: scuBest, scu_pct: scuPct };
         });
-        setPracticeSpots(merged);
+        setPracticeSpots([...merged, ...virtualSpots]);
       } catch(e) { console.error('spot fetch failed', e); }
     })();
   },[piece?.id]);
@@ -1674,7 +1731,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
                         letterSpacing:'0.1em',color:stratColor(l.strategy)}}>
-                        {(l.strategy||'practice').toUpperCase()}
+                        {stratName(l.strategy)}
                         <span style={{color:C.muted,marginLeft:8,fontSize:'0.75rem',
                           fontFamily:"'Inconsolata',monospace",letterSpacing:0}}>
                           {relDate(l.session_date)}
@@ -1701,28 +1758,28 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 setSpotModal(null);onLaunchStrategy('icu',pos);
               }} style={{
                 flex:1,padding:'10px 0',background:C.accent,border:'none',color:'white',
-                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
-                letterSpacing:'0.1em',cursor:'pointer',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                letterSpacing:'0.06em',cursor:'pointer',borderRadius:6,
                 WebkitTapHighlightColor:'transparent',
-              }}>ICU</button>
+              }}>CLICK-UP</button>
               <button onClick={()=>{
                 const pos={page:spotModal.score_page,x:spotModal.score_x,y:spotModal.score_y};
                 setSpotModal(null);onLaunchStrategy('mur',pos);
               }} style={{
                 flex:1,padding:'10px 0',background:C.gold,border:'none',color:'white',
-                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
-                letterSpacing:'0.1em',cursor:'pointer',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                letterSpacing:'0.06em',cursor:'pointer',borderRadius:6,
                 WebkitTapHighlightColor:'transparent',
-              }}>RV</button>
+              }}>RHYTHMS</button>
               <button onClick={()=>{
                 const pos={page:spotModal.score_page,x:spotModal.score_x,y:spotModal.score_y};
                 setSpotModal(null);onLaunchStrategy('scu',pos);
               }} style={{
-                flex:1,padding:'10px 0',background:'#3db06a',border:'none',color:'white',
-                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
-                letterSpacing:'0.1em',cursor:'pointer',
+                flex:1,padding:'10px 0',background:'#2eaa57',border:'none',color:'white',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                letterSpacing:'0.06em',cursor:'pointer',borderRadius:6,
                 WebkitTapHighlightColor:'transparent',
-              }}>SCU</button>
+              }}>SLOW CLICK-UP</button>
             </div>
           </div>
         </>
@@ -4257,7 +4314,7 @@ function SpotLogScreen({ profile, piece, tapPos, onBack }) {
                 <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
                   letterSpacing:'0.1em',color:C.cream}}>
                   {new Date(l.session_date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
-                  <span style={{color:C.muted,marginLeft:8,fontSize:'0.8rem'}}>{l.strategy?.toUpperCase()}</span>
+                  <span style={{color:C.muted,marginLeft:8,fontSize:'0.8rem'}}>{stratName(l.strategy)}</span>
                 </div>
                 <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.8rem',color:C.muted,marginTop:3}}>
                   {l.start_tempo && l.max_tempo ? `♩ ${l.start_tempo} → ${l.max_tempo}` : ''}
