@@ -114,7 +114,13 @@ async function findOrCreateSpot(email, pieceId, tapPos) {
     const r = await sbGet(`/rest/v1/practice_spots?user_email=eq.${encodeURIComponent(email)}&piece_id=eq.${pieceId}&score_page=eq.${tapPos.page}&order=created_at.desc`);
     const spots = await r.json()||[];
     const match = spots.find(s => Math.abs(s.score_y - tapPos.y) < 0.15);
-    if(match) return match.id;
+    if(match) {
+      // Update label if a new one was provided
+      if(tapPos.label && tapPos.label !== match.label) {
+        try { await sbPatch(`/rest/v1/practice_spots?id=eq.${match.id}`, { label: tapPos.label }); } catch(e){}
+      }
+      return match.id;
+    }
     // Create new spot
     const cr = await sbPost('/rest/v1/practice_spots', {
       user_email: email,
@@ -514,14 +520,24 @@ export default function App() {
               <button onClick={async ()=>{
                 if(noteText.trim() && profile?.email) {
                   try {
-                    await sbPost('/rest/v1/practice_logs', {
-                      user_email: profile.email,
-                      piece_id: piece?.id||null,
-                      spot_id: null,
-                      strategy: strategyNote.strategy,
-                      notes: noteText.trim(),
-                      session_date: new Date().toISOString().split('T')[0],
-                    });
+                    // Find the most recent log for this strategy and update its notes
+                    const r = await sbGet(`/rest/v1/practice_logs?user_email=eq.${encodeURIComponent(profile.email)}&piece_id=eq.${piece?.id||''}&strategy=eq.${strategyNote.strategy}&order=created_at.desc&limit=1`);
+                    const rows = await r.json();
+                    if(rows?.[0]?.id) {
+                      await sbPatch(`/rest/v1/practice_logs?id=eq.${rows[0].id}`, {
+                        notes: rows[0].notes ? rows[0].notes + '\n' + noteText.trim() : noteText.trim(),
+                      });
+                    } else {
+                      // Fallback: create new entry if no recent log found
+                      await sbPost('/rest/v1/practice_logs', {
+                        user_email: profile.email,
+                        piece_id: piece?.id||null,
+                        spot_id: null,
+                        strategy: strategyNote.strategy,
+                        notes: noteText.trim(),
+                        session_date: new Date().toISOString().split('T')[0],
+                      });
+                    }
                   } catch(e){}
                 }
                 setStrategyNote(null);
@@ -541,6 +557,7 @@ export default function App() {
         <ScoreViewScreen
           piece={piece} pageImages={pageImages} profile={profile}
           currentPage={currentPage} setCurrentPage={setCurrentPage}
+          suppressPicker={!!strategyNote}
           sessionMode={sessionMode} setSessionMode={s=>{
             setSessionMode(s);
             if(s!=='interleaved') setInterleavedSpots([]);
@@ -1458,13 +1475,13 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
 function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   sessionMode, setSessionMode, interleavedSpots, interleavedMode, setInterleavedMode,
   interleavedValue, setInterleavedValue, onRemoveSpot, onBpmChange, onStartSession,
-  locateEx, onBack, onTapPassage, onLaunchStrategy, profile }) {
+  locateEx, onBack, onTapPassage, onLaunchStrategy, profile, suppressPicker }) {
 
   const land = useOrientation();
   const totalPages = pageImages.length;
   const showTwo = land && totalPages > 1;
   const rightPage = currentPage + 1 < totalPages ? currentPage + 1 : null;
-  const [showSessionPicker, setShowSessionPicker] = useState(true);
+  const [showSessionPicker, setShowSessionPicker] = useState(!suppressPicker);
   // Timer mode
   const [timerTotal, setTimerTotal] = useState(null); // seconds
   const [timerLeft, setTimerLeft] = useState(null);
@@ -3730,13 +3747,14 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack }
     try {
       const prof = JSON.parse(localStorage.getItem('murProfile')||'{}');
       if(prof.email) {
-        sbPost('/rest/v1/practice_logs', {
+        await sbPost('/rest/v1/practice_logs', {
           user_email: prof.email,
           spot_id: murSpotId,
           piece_id: piece?.id||null,
           strategy: 'mur',
           notes: `grouping: ${sec}, ${selNotes.length} notes`,
-        }).catch(()=>{});
+          session_date: new Date().toISOString().split('T')[0],
+        });
       }
     } catch(e){}
   };
