@@ -122,6 +122,7 @@ async function findOrCreateSpot(email, pieceId, tapPos) {
       score_page: tapPos.page,
       score_x: tapPos.x,
       score_y: tapPos.y,
+      label: tapPos.label || null,
     });
     const rows = await cr.json();
     return rows?.[0]?.id || null;
