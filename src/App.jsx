@@ -1182,11 +1182,11 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         exercises.forEach(ex => {
           const hasSpot = spots.some(s =>
             s.score_page === parseInt(ex.score_page) &&
-            Math.abs(s.score_y - parseFloat(ex.score_y)) < 0.15
+            Math.abs(s.score_y - parseFloat(ex.score_y)) < 0.07
           );
           const hasVirtual = virtualSpots.some(v =>
             v.score_page === parseInt(ex.score_page) &&
-            Math.abs(v.score_y - parseFloat(ex.score_y)) < 0.15
+            Math.abs(v.score_y - parseFloat(ex.score_y)) < 0.07
           );
           if(!hasSpot && !hasVirtual) {
             virtualSpots.push({
@@ -1217,7 +1217,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
           // Check if any exercises are near this spot
           const nearExercises = exercises.filter(ex =>
             parseInt(ex.score_page) === s.score_page &&
-            Math.abs(parseFloat(ex.score_y) - s.score_y) < 0.15
+            Math.abs(parseFloat(ex.score_y) - s.score_y) < 0.07
           );
           const strategies = {};
           sl.forEach(l=>{
@@ -4569,44 +4569,52 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
   const safeIdx  = Math.min(idx,steps.length-1);
   const step     = steps[safeIdx];
 
-  // Find or create spot, then log session start
+  // ICU spot - only created on save
   const [icuSpotId, setIcuSpotId] = useState(null);
-  useEffect(()=>{
-    (async ()=>{
-      try {
-        const prof = profile || JSON.parse(localStorage.getItem('murProfile')||'{}');
-        if(!prof.email) return;
-        const sid = await findOrCreateSpot(prof.email, piece?.id, tapPos);
-        setIcuSpotId(sid);
-        sbPost('/rest/v1/practice_logs', {
-          user_email: prof.email,
-          spot_id: sid,
-          piece_id: piece?.id||null,
-          strategy: 'icu',
-          start_tempo: startTempo,
-          perf_tempo: goalTempo,
-          notes: `${N} units`,
-        }).catch(()=>{});
-      } catch(e){}
-    })();
-  },[]);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
 
   const handleDone = () => {
+    setShowSavePrompt(true);
+  };
+
+  const saveAndExit = async () => {
     try {
       const prof = profile || JSON.parse(localStorage.getItem('murProfile')||'{}');
       if(prof.email) {
-        sbPost('/rest/v1/practice_logs', {
+        const sid = await findOrCreateSpot(prof.email, piece?.id, tapPos);
+        await sbPost('/rest/v1/practice_logs', {
           user_email: prof.email,
-          spot_id: icuSpotId,
+          spot_id: sid,
           piece_id: piece?.id||null,
           strategy: 'icu',
           start_tempo: startTempo,
           max_tempo: step.tempo,
           perf_tempo: goalTempo,
           notes: `${N} units, completed`,
-        }).catch(()=>{});
+        });
       }
     } catch(e){}
+    setShowSavePrompt(false);
+    if(onDone) onDone();
+  };
+
+  const exitWithoutSaving = async () => {
+    try {
+      const prof = profile || JSON.parse(localStorage.getItem('murProfile')||'{}');
+      if(prof.email) {
+        await sbPost('/rest/v1/practice_logs', {
+          user_email: prof.email,
+          spot_id: null,
+          piece_id: piece?.id||null,
+          strategy: 'icu',
+          start_tempo: startTempo,
+          max_tempo: step.tempo,
+          perf_tempo: goalTempo,
+          notes: `${N} units, not saved to score`,
+        });
+      }
+    } catch(e){}
+    setShowSavePrompt(false);
     if(onDone) onDone();
   };
   const atGoal   = step.tempo>=goalTempo;
@@ -4762,6 +4770,40 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
       {topBarContent(land)}
       {progressBar}
       {photoBlock}
+      {/* Save prompt */}
+      {showSavePrompt && (
+        <>
+          <div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,0.3)'}}/>
+          <div style={{position:'fixed',left:'50%',top:'50%',transform:'translate(-50%,-50%)',
+            zIndex:501,background:'#fff',border:`1px solid ${C.bord}`,
+            borderRadius:12,padding:'24px',width:'min(340px,88vw)',
+            display:'flex',flexDirection:'column',gap:14,textAlign:'center',
+            boxShadow:'0 8px 40px rgba(0,0,0,0.15)'}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.2rem',
+              letterSpacing:'0.12em',color:C.accent}}>
+              SESSION COMPLETE
+            </div>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+              fontSize:'1.05rem',color:'#333',lineHeight:1.5}}>
+              You reached ♩ = {step.tempo}. Save these settings for this passage?
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={saveAndExit} style={{
+                flex:1,padding:'12px 0',background:C.accent,border:'none',color:'white',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.95rem',
+                letterSpacing:'0.1em',cursor:'pointer',borderRadius:8,
+                WebkitTapHighlightColor:'transparent',
+              }}>SAVE</button>
+              <button onClick={exitWithoutSaving} style={{
+                flex:1,padding:'12px 0',background:'#f0f0f0',border:`1px solid ${C.bord}`,
+                color:'#666',fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.95rem',
+                letterSpacing:'0.1em',cursor:'pointer',borderRadius:8,
+                WebkitTapHighlightColor:'transparent',
+              }}>DON'T SAVE</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
