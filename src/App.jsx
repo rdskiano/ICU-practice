@@ -2079,7 +2079,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
       {/* Score — fills entire screen, behind everything */}
 
       {/* Instruction card — blocked mode */}
-      {showInstructions && !isInterleaved && !locateEx && !showSessionPicker && !spotSetup && !showOverlay && (
+      {showInstructions && !isInterleaved && !locateEx && !showSessionPicker && (
         <div style={{
           position:'absolute',bottom:20,left:'50%',transform:'translateX(-50%)',
           zIndex:30,background:'rgba(255,255,255,0.97)',
