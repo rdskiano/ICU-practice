@@ -383,6 +383,8 @@ export default function App() {
   const [savedExercise,setSavedExercise] = useState(null);
   const [sessionMode,setSessionMode]       = useState('massed');
   const [interleavedSpots,setInterleavedSpots] = useState([]);
+  const [interleavedMode,setInterleavedMode] = useState(null); // 'timed' | 'consistency'
+  const [interleavedValue,setInterleavedValue] = useState(5); // minutes or reps
   const [tapPos,setTapPos]             = useState(null);
   const [showOverlay,setShowOverlay]   = useState(false);
   const [locateEx,setLocateEx]         = useState(null);
@@ -541,6 +543,8 @@ export default function App() {
             if(s!=='interleaved') setInterleavedSpots([]);
           }}
           interleavedSpots={interleavedSpots}
+          interleavedMode={interleavedMode} setInterleavedMode={setInterleavedMode}
+          interleavedValue={interleavedValue} setInterleavedValue={setInterleavedValue}
           onRemoveSpot={id=>setInterleavedSpots(prev=>{
             const filtered=prev.filter(s=>s.id!==id);
             return filtered.map((s,i)=>({...s,id:i+1}));
@@ -776,6 +780,8 @@ export default function App() {
         <InterleavedSessionScreen
           pageImages={pageImages}
           spots={interleavedSpots}
+          rotationMode={interleavedMode}
+          rotationValue={interleavedValue}
           onBack={()=>{ setStrategyNote({strategy:'interleaved'}); setNoteText(''); setInterleavedSpots([]); setSessionMode('massed'); setScreen('score'); }}
         />
       )}
@@ -1435,7 +1441,8 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
    SCORE VIEW — home base for a repertoire item
 ═══════════════════════════════════════════════════════════════════════ */
 function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
-  sessionMode, setSessionMode, interleavedSpots, onRemoveSpot, onBpmChange, onStartSession,
+  sessionMode, setSessionMode, interleavedSpots, interleavedMode, setInterleavedMode,
+  interleavedValue, setInterleavedValue, onRemoveSpot, onBpmChange, onStartSession,
   locateEx, onBack, onTapPassage, onLaunchStrategy, profile }) {
 
   const land = useOrientation();
@@ -1744,7 +1751,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const modeBtn = (mode, label) => (
     <button onClick={()=>{
       setSessionMode(mode);
-      if(mode==='interleaved' && !localStorage.getItem('pfn_hideInterleavedIntro')) setShowIntroModal(true);
+      if(mode==='interleaved') setShowIntroModal(true);
     }} style={{
       fontFamily:"'Bebas Neue',sans-serif", fontSize:'0.9rem',
       letterSpacing:'0.1em', padding:'7px 18px', borderRadius:6,
@@ -1839,7 +1846,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 setSessionMode('interleaved');
                 setShowSessionPicker(false);
                 setShowChrome(true);
-                if(!localStorage.getItem('pfn_hideInterleavedIntro')) setShowIntroModal(true);
+                setShowIntroModal(true);
               }} style={{
                 padding:'16px 20px',background:'#fff',
                 border:'2px solid #4a9eff',borderRadius:12,
@@ -2285,41 +2292,131 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
 
           {/* Intro modal */}
           {showIntroModal && (
+            <>
+              <div onClick={()=>{setShowIntroModal(false);if(!interleavedMode)setSessionMode('massed');}} style={{
+                position:'fixed',inset:0,zIndex:49,background:'rgba(0,0,0,0.3)'}}/>
+              <div style={{
+                position:'fixed',left:'50%',top:'50%',
+                transform:'translate(-50%,-50%)',
+                zIndex:50,background:'#fff',
+                borderRadius:16,padding:'24px',
+                width:'min(400px, 90vw)',
+                boxShadow:'0 12px 48px rgba(0,0,0,0.2)',
+                display:'flex',flexDirection:'column',gap:14,
+              }}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.3rem',
+                  letterSpacing:'0.12em',color:'#4a9eff',textAlign:'center'}}>
+                  HOW DO YOU WANT TO ROTATE?
+                </div>
+
+                {/* Timed */}
+                <div style={{
+                  padding:'16px 20px',
+                  background: interleavedMode==='timed' ? 'rgba(74,158,255,0.06)' : '#fff',
+                  border: `2px solid ${interleavedMode==='timed' ? '#4a9eff' : '#e0e0e0'}`,
+                  borderRadius:12,display:'flex',flexDirection:'column',gap:8,
+                }}>
+                  <button onClick={()=>{setInterleavedMode('timed');setInterleavedValue(3);}} style={{
+                    background:'none',border:'none',textAlign:'left',cursor:'pointer',
+                    padding:0,WebkitTapHighlightColor:'transparent',
+                  }}>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
+                      letterSpacing:'0.1em',color:'#4a9eff'}}>TIMED ROTATION</div>
+                    <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                      fontSize:'0.95rem',color:'#666',lineHeight:1.4,marginTop:2}}>
+                      Practice freely, switch when time's up
+                    </div>
+                  </button>
+                  {interleavedMode==='timed' && (
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                      <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:'0.95rem',color:'#888'}}>
+                        Switch every
+                      </span>
+                      {[3,5,10,15].map(v=>(
+                        <button key={v} onClick={()=>setInterleavedValue(v)} style={{
+                          width:38,height:32,borderRadius:8,
+                          background: interleavedValue===v ? '#4a9eff' : '#f5f5f5',
+                          color: interleavedValue===v ? '#fff' : '#666',
+                          border: `1px solid ${interleavedValue===v ? '#4a9eff' : '#ddd'}`,
+                          fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+                          cursor:'pointer',WebkitTapHighlightColor:'transparent',
+                        }}>{v}</button>
+                      ))}
+                      <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:'0.95rem',color:'#888'}}>min</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Consistency Goal */}
+                <div style={{
+                  padding:'16px 20px',
+                  background: interleavedMode==='consistency' ? 'rgba(74,158,255,0.06)' : '#fff',
+                  border: `2px solid ${interleavedMode==='consistency' ? '#4a9eff' : '#e0e0e0'}`,
+                  borderRadius:12,display:'flex',flexDirection:'column',gap:8,
+                }}>
+                  <button onClick={()=>{setInterleavedMode('consistency');setInterleavedValue(5);}} style={{
+                    background:'none',border:'none',textAlign:'left',cursor:'pointer',
+                    padding:0,WebkitTapHighlightColor:'transparent',
+                  }}>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
+                      letterSpacing:'0.1em',color:'#4a9eff'}}>CONSISTENCY GOAL</div>
+                    <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                      fontSize:'0.95rem',color:'#666',lineHeight:1.4,marginTop:2}}>
+                      Move on after getting it right X times in a row
+                    </div>
+                  </button>
+                  {interleavedMode==='consistency' && (
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                      <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:'0.95rem',color:'#888'}}>
+                        Correct in a row
+                      </span>
+                      {[3,5,7,10].map(v=>(
+                        <button key={v} onClick={()=>setInterleavedValue(v)} style={{
+                          width:38,height:32,borderRadius:8,
+                          background: interleavedValue===v ? '#4a9eff' : '#f5f5f5',
+                          color: interleavedValue===v ? '#fff' : '#666',
+                          border: `1px solid ${interleavedValue===v ? '#4a9eff' : '#ddd'}`,
+                          fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+                          cursor:'pointer',WebkitTapHighlightColor:'transparent',
+                        }}>{v}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button onClick={()=>{
+                  if(interleavedMode) setShowIntroModal(false);
+                }} style={{
+                  padding:'12px 0',
+                  background: interleavedMode ? '#4a9eff' : '#e0e0e0',
+                  border:'none',color: interleavedMode ? 'white' : '#999',
+                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+                  letterSpacing:'0.12em',cursor: interleavedMode ? 'pointer' : 'default',
+                  borderRadius:10,WebkitTapHighlightColor:'transparent',
+                }}>PLACE SPOTS ON SCORE →</button>
+              </div>
+            </>
+          )}
+
+          {/* Floating placement instructions */}
+          {isInterleaved && !showIntroModal && interleavedSpots.length < 3 && (
             <div style={{
-              position:'fixed',left:'50%',top:'50%',
-              transform:'translate(-50%,-50%)',
-              zIndex:50,background:'#fff',border:'2px solid #4a9eff',
-              borderRadius:6,padding:'22px 24px',
-              width:'min(340px, 88vw)',
-              boxShadow:'0 8px 40px rgba(0,0,0,0.7)',
-              display:'flex',flexDirection:'column',gap:14,
+              position:'absolute',bottom:20,left:'50%',transform:'translateX(-50%)',
+              zIndex:30,background:'rgba(255,255,255,0.95)',
+              backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',
+              borderRadius:14,padding:'14px 22px',
+              boxShadow:'0 4px 24px rgba(0,0,0,0.12)',
+              border:'1px solid rgba(74,158,255,0.2)',
+              maxWidth:'min(340px,85vw)',textAlign:'center',
             }}>
-              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
-                  letterSpacing:'0.15em',color:'#4a9eff'}}>INTERLEAVED PRACTICE</div>
-                <button onClick={()=>setShowIntroModal(false)} style={{
-                  background:'none',border:'none',color:C.muted,cursor:'pointer',
-                  fontSize:'1.1rem',padding:'0 2px',lineHeight:1,flexShrink:0,
-                }}>✕</button>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+                letterSpacing:'0.1em',color:'#4a9eff',marginBottom:4}}>
+                {interleavedSpots.length === 0 ? 'TAP YOUR SCORE TO PLACE SPOTS' : `${interleavedSpots.length} OF 3+ SPOTS PLACED`}
               </div>
-              <div style={{fontFamily:"'Cormorant Garamond',serif",
-                fontSize:'1.05rem',color:C.cream,lineHeight:1.65}}>
-                Tap a few different passages in your music to mark them — anywhere from 3 to 7 spots.
-                Optionally set a practice tempo for each one.
-                <br/><br/>
-                You'll cycle through them in random order. The goal is 5 clean runs in a row for every spot — miss one and that spot resets to zero!
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                fontSize:'0.95rem',color:'#888',lineHeight:1.4}}>
+                Tap near each passage you want to practice. Place at least 3 spots, up to 7.
               </div>
-              <button onClick={()=>setShowIntroModal(false)} style={{
-                padding:'10px 0',background:'#4a9eff',border:'none',color:'white',
-                fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
-                letterSpacing:'0.12em',cursor:'pointer',borderRadius:3,
-                WebkitTapHighlightColor:'transparent',
-              }}>GOT IT →</button>
-              <button onClick={()=>{localStorage.setItem('pfn_hideInterleavedIntro','1');setShowIntroModal(false);}} style={{
-                padding:'6px 0',background:'transparent',border:'none',
-                color:C.muted,fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-                fontSize:'0.9rem',cursor:'pointer',WebkitTapHighlightColor:'transparent',
-              }}>Don't show this again</button>
             </div>
           )}
 
@@ -2333,8 +2430,8 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
 /* ═══════════════════════════════════════════════════════════════════════
    INTERLEAVED — SPOT BOX
 ═══════════════════════════════════════════════════════════════════════ */
-function SpotBox({ spot, mode, onRemove, isCurrent, isSelected, onSelect }) {
-  const isDone    = spot.checks >= 5;
+function SpotBox({ spot, mode, onRemove, isCurrent, isSelected, onSelect, targetChecks=5 }) {
+  const isDone    = spot.visited || spot.checks >= targetChecks;
   const dimmed    = mode === 'session' && !isCurrent;
   const selected  = mode === 'placement' && isSelected;
   const border    = dimmed   ? 'rgba(140,130,120,0.3)'
@@ -2388,14 +2485,16 @@ function SpotBox({ spot, mode, onRemove, isCurrent, isSelected, onSelect }) {
         </div>
       </div>
       <div style={{display:'flex',gap:3,alignItems:'center'}}>
-        {[0,1,2,3,4].map(i=>(
+        {targetChecks <= 10 ? Array.from({length:targetChecks},(_,i)=>(
           <div key={i} style={{
             width:9,height:9,borderRadius:'50%',
             background: i<spot.checks ? '#3db06a' : 'rgba(255,255,255,0.2)',
             border:`1px solid ${i<spot.checks?'#3db06a':'rgba(255,255,255,0.4)'}`,
             transition:'background 0.15s',
           }}/>
-        ))}
+        )) : spot.visited ? (
+          <div style={{color:'#3db06a',fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem'}}>✓</div>
+        ) : null}
       </div>
     </div>
   );
@@ -2404,12 +2503,17 @@ function SpotBox({ spot, mode, onRemove, isCurrent, isSelected, onSelect }) {
 /* ═══════════════════════════════════════════════════════════════════════
    INTERLEAVED — SESSION SCREEN
 ═══════════════════════════════════════════════════════════════════════ */
-function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
-  const [spots, setSpots]                 = useState(()=>initialSpots.map(s=>({...s,checks:0})));
+function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMode, rotationValue, onBack }) {
+  const [spots, setSpots]                 = useState(()=>initialSpots.map(s=>({...s,checks:0,visited:false})));
   const [currentSpotId, setCurrentSpotId] = useState(null);
   const [currentPage, setCurrentPage]     = useState(0);
   const [flash, setFlash]                 = useState(null);
   const [done, setDone]                   = useState(false);
+  const [showNextSpot, setShowNextSpot]   = useState(false);
+  const [spotTimer, setSpotTimer]         = useState(null); // seconds remaining for timed mode
+  const spotTimerRef = useRef(null);
+  const targetChecks = rotationMode==='consistency' ? (rotationValue||5) : 999;
+  const isTimed = rotationMode==='timed';
   const queueRef        = useRef([]);
   const containerRef    = useRef();
   const imgRef          = useRef();
@@ -2452,7 +2556,21 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
     currentSpotIdRef.current=first;
     const s=initialSpots.find(s=>s.id===first);
     if(s) setCurrentPage(s.page);
+    if(isTimed) setSpotTimer((rotationValue||3)*60);
   },[]);
+
+  // Timed mode: countdown per spot
+  useEffect(()=>{
+    if(!isTimed || spotTimer==null || spotTimer<=0 || showNextSpot) return;
+    if(spotTimer<=0) { setShowNextSpot(true); return; }
+    spotTimerRef.current = setTimeout(()=>setSpotTimer(p=>p-1), 1000);
+    return ()=>clearTimeout(spotTimerRef.current);
+  },[isTimed, spotTimer, showNextSpot]);
+  useEffect(()=>{
+    if(isTimed && spotTimer!=null && spotTimer<=0) setShowNextSpot(true);
+  },[spotTimer]);
+
+  const fmtTime = (s) => { const m=Math.floor(s/60),sec=s%60; return `${m}:${sec<10?'0':''}${sec}`; };
 
   const scrollToSpot = (spotId, pg, updatedSpots) => {
     requestAnimationFrame(()=>{
@@ -2465,9 +2583,23 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
     });
   };
 
+  const advanceTimed = () => {
+    setShowNextSpot(false);
+    const updated = spots.map(s=>s.id===currentSpotId?{...s,visited:true}:s);
+    setSpots(updated);
+    const unvisited = updated.filter(s=>!s.visited).map(s=>s.id);
+    if(unvisited.length===0){ setDone(true); return; }
+    const next = unvisited[Math.floor(Math.random()*unvisited.length)];
+    setCurrentSpotId(next);
+    currentSpotIdRef.current=next;
+    const ns=updated.find(s=>s.id===next);
+    if(ns){ setCurrentPage(ns.page); scrollToSpot(next,ns.page,updated); }
+    setSpotTimer((rotationValue||3)*60);
+  };
+
   const advance = (updatedSpots) => {
-    if(updatedSpots.every(s=>s.checks>=5)){setDone(true);return;}
-    const incomplete=updatedSpots.filter(s=>s.checks<5).map(s=>s.id);
+    if(updatedSpots.every(s=>s.checks>=targetChecks)){setDone(true);return;}
+    const incomplete=updatedSpots.filter(s=>s.checks<targetChecks).map(s=>s.id);
     let q=queueRef.current.filter(id=>incomplete.includes(id));
     if(q.length===0){
       q=shuffle([...incomplete]);
@@ -2495,7 +2627,7 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
     advance(updated);
   };
 
-  const completedCount=spots.filter(s=>s.checks>=5).length;
+  const completedCount=spots.filter(s=> isTimed ? s.visited : s.checks>=targetChecks).length;
   const land = useOrientation();
   const totalPages=pageImages.length;
   const showTwo = land && totalPages > 1;
@@ -2535,19 +2667,39 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
         padding:'6px 10px',flexShrink:0,
         background:verdictBg,borderBottom:`1px solid ${C.bord}`,
         transition:'background 0.3s'}}>
-        {/* Miss / Got it */}
-        <button onClick={()=>handleVerdict(false)} style={{
-          padding:'6px 14px',background:'transparent',border:`1px solid #e57373`,
-          color:'#e57373',cursor:'pointer',
-          fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',letterSpacing:'0.08em',
-          WebkitTapHighlightColor:'transparent',flexShrink:0,
-        }}>✗ MISS</button>
-        <button onClick={()=>handleVerdict(true)} style={{
-          padding:'6px 14px',background:'transparent',border:`1px solid #3db06a`,
-          color:'#3db06a',cursor:'pointer',
-          fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',letterSpacing:'0.08em',
-          WebkitTapHighlightColor:'transparent',flexShrink:0,
-        }}>✓ GOT IT</button>
+        {/* Miss / Got it — consistency mode only */}
+        {!isTimed && (<>
+          <button onClick={()=>handleVerdict(false)} style={{
+            padding:'6px 14px',background:'transparent',border:`1px solid #e57373`,
+            color:'#e57373',cursor:'pointer',
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',letterSpacing:'0.08em',
+            WebkitTapHighlightColor:'transparent',flexShrink:0,
+          }}>✗ MISS</button>
+          <button onClick={()=>handleVerdict(true)} style={{
+            padding:'6px 14px',background:'transparent',border:`1px solid #3db06a`,
+            color:'#3db06a',cursor:'pointer',
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',letterSpacing:'0.08em',
+            WebkitTapHighlightColor:'transparent',flexShrink:0,
+          }}>✓ GOT IT</button>
+        </>)}
+
+        {/* Timed mode: timer + next spot */}
+        {isTimed && (
+          showNextSpot ? (
+            <button onClick={advanceTimed} style={{
+              padding:'8px 20px',background:'#4a9eff',border:'none',
+              color:'white',cursor:'pointer',
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.95rem',letterSpacing:'0.1em',
+              borderRadius:8,WebkitTapHighlightColor:'transparent',flexShrink:0,
+              animation:'pulse 1.5s infinite',
+            }}>NEXT SPOT →</button>
+          ) : (
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
+              color:'#4a9eff',letterSpacing:'0.05em',flexShrink:0,minWidth:50}}>
+              {spotTimer!=null ? fmtTime(spotTimer) : ''}
+            </div>
+          )
+        )}
 
         <div style={{width:1,height:24,background:C.bord,flexShrink:0}}/>
 
@@ -2608,7 +2760,7 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
               color:'#4a9eff',letterSpacing:'0.08em',flexShrink:0,textAlign:'center',
               minWidth:30}}>
-              {curSpot.checks}/5
+              {isTimed ? (spotTimer!=null ? fmtTime(spotTimer) : '') : `${curSpot.checks}/${targetChecks}`}
             </div>
           ) : null;
         })()}
@@ -2661,7 +2813,7 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
             }}
           />
           {spotsOnPage.map(spot=>(
-            <SpotBox key={spot.id} spot={spot} mode="session" isCurrent={spot.id===currentSpotId} />
+            <SpotBox key={spot.id} spot={spot} mode="session" isCurrent={spot.id===currentSpotId} targetChecks={targetChecks} />
           ))}
           {spotsOnPage.filter(s=>s.id===currentSpotId).map(spot=>(
             <div key={'ring'+spot.id} style={{
@@ -2686,7 +2838,7 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, onBack }) {
                 userSelect:'none',WebkitUserSelect:'none'}}
               draggable={false} />
             {spotsOnRight.map(spot=>(
-              <SpotBox key={spot.id} spot={spot} mode="session" isCurrent={spot.id===currentSpotId} />
+              <SpotBox key={spot.id} spot={spot} mode="session" isCurrent={spot.id===currentSpotId} targetChecks={targetChecks} />
             ))}
             {spotsOnRight.filter(s=>s.id===currentSpotId).map(spot=>(
               <div key={'ring'+spot.id} style={{
