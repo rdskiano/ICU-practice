@@ -622,6 +622,28 @@ export default function App() {
               });
             } else {
               // Blocked mode: show spot setup (name or pick existing)
+              // If tapped directly on a tempo tracker dot, skip naming
+              if(pos.spotDirect) {
+                const prof = profile || getProfile();
+                let nearby = [];
+                if(prof.email && piece?.id) {
+                  try {
+                    const r = await sbGet(`/rest/v1/practice_spots?user_email=eq.${encodeURIComponent(prof.email)}&piece_id=eq.${piece.id}&score_page=eq.${pos.page}`);
+                    const allSpots = await r.json()||[];
+                    nearby = allSpots.filter(s => Math.abs(s.score_y - pos.y) < 0.20);
+                  } catch(e) {}
+                }
+                const closest = nearby.length > 0 ? nearby.reduce((a,b) => Math.abs(a.score_y - pos.y) < Math.abs(b.score_y - pos.y) ? a : b) : null;
+                if(closest) {
+                  setSelectedSpot(closest);
+                  setTapPos({page:closest.score_page, x:closest.score_x, y:closest.score_y, label:closest.label});
+                } else {
+                  setSelectedSpot(null);
+                  setTapPos(pos);
+                }
+                setShowOverlay(true);
+                return;
+              }
               const prof = profile || getProfile();
               let nearby = [];
               if(prof.email && piece?.id) {
@@ -631,9 +653,10 @@ export default function App() {
                   nearby = allSpots.filter(s => Math.abs(s.score_y - pos.y) < 0.20);
                 } catch(e) { console.error('spot check failed', e); }
               }
+              // Always show spot setup popover
               setSpotSetup({tapPos:pos, nearby, screenX: pos.screenX||0, screenY: pos.screenY||0});
               const region = pos.y < 0.33 ? 'top' : pos.y < 0.66 ? 'middle' : 'bottom';
-              setSpotName(`Page ${pos.page+1}, ${region}`);
+              setSpotName(nearby.length > 0 ? '' : `Page ${pos.page+1}, ${region}`);
             }
           }}
         />
@@ -1802,7 +1825,8 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const [placeMetroOn,  setPlaceMetroOn]    = useState(false);
   const [promptSpotId,  setPromptSpotId]    = useState(null); // Y/N tempo dialog
   const [metroWaiting,  setMetroWaiting]    = useState(false); // metro bar glow
-  const [showIntroModal, setShowIntroModal] = useState(false); // instructions on mode switch
+  const [showIntroModal, setShowIntroModal] = useState(false);
+  const [showTempoTrackers, setShowTempoTrackers] = useState(false); // instructions on mode switch
   const placeMetro = useRef(new Metro());
   const bpmTimerRef    = useRef(null);
   const bpmIntervalRef = useRef(null);
@@ -2238,8 +2262,8 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               targetChecks={interleavedMode==='timed' ? 999 : (interleavedValue||5)}
             />
           ))}
-          {/* SCU tempo indicators */}
-          {!isInterleaved && !locateEx && practiceSpots.filter(s=>s.score_page===currentPage && s.strategies?.scu).map(spot=>{
+          {/* SCU tempo indicators — only when toggle is on */}
+          {showTempoTrackers && !isInterleaved && !locateEx && practiceSpots.filter(s=>s.score_page===currentPage && s.strategies?.scu).map(spot=>{
             const ox = spot.visual_offset_x||0;
             const oy = spot.visual_offset_y||0;
             const best = spot.scu_best||0;
@@ -2249,8 +2273,8 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               <div key={spot.id}
                 onClick={e=>{
                   e.stopPropagation();
-                  const pos={page:spot.score_page,x:spot.score_x,y:spot.score_y};
-                  onLaunchStrategy('scu', pos);
+                  // Go to strategy overlay with this spot — no naming needed
+                  onTapPassage({page:spot.score_page, x:spot.score_x, y:spot.score_y, label:spot.label, spotDirect:true});
                 }}
                 onTouchStart={e=>handleDotDragStart(e,spot)}
                 onTouchMove={handleDotDragMove}
@@ -2322,6 +2346,15 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 letterSpacing:'0.08em',cursor:'pointer',
                 WebkitTapHighlightColor:'transparent',
               }}>⏱</button>
+              <button onClick={()=>setShowTempoTrackers(t=>!t)} style={{
+                background: showTempoTrackers ? 'rgba(46,170,87,0.15)' : 'rgba(0,0,0,0.06)',
+                border: showTempoTrackers ? '1px solid rgba(46,170,87,0.3)' : 'none',
+                color: showTempoTrackers ? '#2eaa57' : '#666',
+                padding:'4px 10px',borderRadius:12,
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',
+                letterSpacing:'0.06em',cursor:'pointer',
+                WebkitTapHighlightColor:'transparent',
+              }}>{showTempoTrackers ? '♩ ON' : '♩'}</button>
             </>)}
           </div>
           <div style={{textAlign:'center',flex:1,minWidth:0}}>
