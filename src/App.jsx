@@ -654,24 +654,9 @@ export default function App() {
               // Blocked mode: show spot setup (name or pick existing)
               // If tapped directly on a tempo tracker dot, skip naming
               if(pos.spotDirect) {
-                const prof = profile || getProfile();
-                let nearby = [];
-                if(prof.email && piece?.id) {
-                  try {
-                    const r = await sbGet(`/rest/v1/practice_spots?user_email=eq.${encodeURIComponent(prof.email)}&piece_id=eq.${piece.id}&score_page=eq.${pos.page}`);
-                    const allSpots = await r.json()||[];
-                    nearby = allSpots.filter(s => Math.abs(s.score_y - pos.y) < 0.10 && (s.score_x == null || Math.abs(s.score_x - pos.x) < 0.10));
-                  } catch(e) {}
-                }
-                const closest = nearby.length > 0 ? nearby.reduce((a,b) => Math.abs(a.score_y - pos.y) < Math.abs(b.score_y - pos.y) ? a : b) : null;
-                if(closest) {
-                  setSelectedSpot(closest);
-                  setTapPos({page:closest.score_page, x:closest.score_x, y:closest.score_y, label:closest.label});
-                } else {
-                  setSelectedSpot(null);
-                  setTapPos(pos);
-                }
-                setShowOverlay(true);
+                setTapPos(pos);
+                setScuSpot({page:pos.page, x:pos.x, y:pos.y, piece_id:piece?.id||null});
+                setScreen('scu');
                 return;
               }
               const prof = profile || getProfile();
