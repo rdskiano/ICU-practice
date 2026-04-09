@@ -1050,8 +1050,10 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
   const [confirmDel,setConfirmDel] = useState(null); // {type:'piece'|'exercise', id, title}
   const [deleting,setDeleting]   = useState(false);
   const [locatePicker,setLocatePicker] = useState(null);
-  const [locateMsg,setLocateMsg]       = useState(null); // {ok:bool, text:string}
-  const [loadingPdf,setLoadingPdf]     = useState(null); // piece title while loading
+  const [locateMsg,setLocateMsg]       = useState(null);
+  const [loadingPdf,setLoadingPdf]     = useState(null);
+  const [editingLog, setEditingLog]    = useState(null); // {id, notes}
+  const [deletingLog, setDeletingLog]  = useState(null); // log id to confirm delete
 
   // React to locate result coming back from score screen
   useEffect(()=>{
@@ -1448,6 +1450,37 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
 
         {tab==='log' && (
           <>
+            {/* Delete confirmation */}
+            {deletingLog && (
+              <>
+                <div onClick={()=>setDeletingLog(null)} style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,0.25)'}}/>
+                <div style={{position:'fixed',left:'50%',top:'50%',transform:'translate(-50%,-50%)',
+                  zIndex:501,background:'#fff',borderRadius:14,padding:'20px 24px',
+                  width:'min(320px,85vw)',boxShadow:'0 8px 32px rgba(0,0,0,0.15)',
+                  textAlign:'center'}}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
+                    letterSpacing:'0.1em',color:'#1a1a1a',marginBottom:8}}>DELETE THIS ENTRY?</div>
+                  <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                    fontSize:'1rem',color:'#888',marginBottom:16}}>This cannot be undone.</div>
+                  <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+                    <button onClick={()=>setDeletingLog(null)} style={{
+                      padding:'10px 20px',borderRadius:10,background:'#f0f0f0',border:'none',
+                      fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',color:'#666',cursor:'pointer',
+                    }}>CANCEL</button>
+                    <button onClick={async ()=>{
+                      try {
+                        await sbDelete(`/rest/v1/practice_logs?id=eq.${deletingLog}`);
+                        setLogs(prev=>prev.filter(l=>l.id!==deletingLog));
+                      } catch(e){}
+                      setDeletingLog(null);
+                    }} style={{
+                      padding:'10px 20px',borderRadius:10,background:'#e57373',border:'none',
+                      fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',color:'#fff',cursor:'pointer',
+                    }}>DELETE</button>
+                  </div>
+                </div>
+              </>
+            )}
             {loading && <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'1rem',color:C.muted,textAlign:'center',padding:40}}>Loading...</div>}
             {!loading && logs.length===0 && (
               <div style={{textAlign:'center',padding:60,color:C.muted,fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',fontSize:'1.2rem'}}>
@@ -1532,6 +1565,7 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
                                   const pct = (l.perf_tempo && l.max_tempo)
                                     ? Math.min(100, Math.round((l.max_tempo / l.perf_tempo) * 100))
                                     : null;
+                                  const isEditing = editingLog?.id === l.id;
                                   return (
                                     <div key={l.id} style={{padding:'6px 12px',borderBottom:`1px solid #f0f0f0`,
                                       display:'flex',alignItems:'flex-start',gap:10}}>
@@ -1545,25 +1579,61 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
                                           {l.perf_tempo ? ` (goal: ${l.perf_tempo})` : ''}
                                           {l.reps_clean ? ` · ${l.reps_clean} clean` : ''}
                                         </div>
-                                        {l.notes && (
-                                          <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
-                                            fontSize:'0.95rem',color:'#555',marginTop:3,lineHeight:1.4}}>
-                                            {l.notes}
+                                        {isEditing ? (
+                                          <div style={{marginTop:4}}>
+                                            <textarea value={editingLog.notes} onChange={e=>setEditingLog({...editingLog, notes:e.target.value})}
+                                              rows={2} style={{
+                                                width:'100%',padding:'8px 10px',borderRadius:8,
+                                                border:'1.5px solid #ddd',fontFamily:"'Cormorant Garamond',serif",
+                                                fontSize:'0.95rem',color:'#333',outline:'none',boxSizing:'border-box',
+                                                resize:'vertical',lineHeight:1.4,
+                                              }}
+                                              onFocus={e=>{e.target.style.borderColor=C.accent}}
+                                              onBlur={e=>{e.target.style.borderColor='#ddd'}}
+                                            />
+                                            <div style={{display:'flex',gap:6,marginTop:4}}>
+                                              <button onClick={async ()=>{
+                                                try {
+                                                  await sbPatch(`/rest/v1/practice_logs?id=eq.${l.id}`, {notes: editingLog.notes||null});
+                                                  setLogs(prev=>prev.map(lg=>lg.id===l.id?{...lg,notes:editingLog.notes}:lg));
+                                                } catch(e){}
+                                                setEditingLog(null);
+                                              }} style={{
+                                                padding:'4px 12px',borderRadius:6,background:C.accent,border:'none',
+                                                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                                                letterSpacing:'0.06em',color:'#fff',cursor:'pointer',
+                                              }}>SAVE</button>
+                                              <button onClick={()=>setEditingLog(null)} style={{
+                                                padding:'4px 12px',borderRadius:6,background:'#f0f0f0',border:'none',
+                                                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                                                letterSpacing:'0.06em',color:'#666',cursor:'pointer',
+                                              }}>CANCEL</button>
+                                            </div>
                                           </div>
+                                        ) : (
+                                          l.notes && (
+                                            <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                                              fontSize:'0.95rem',color:'#555',marginTop:3,lineHeight:1.4}}>
+                                              {l.notes}
+                                            </div>
+                                          )
                                         )}
                                       </div>
-                                      {pct !== null && (
+                                      {pct !== null && l.strategy === 'scu' && (
                                         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
-                                          color:pct>=100?'#2eaa57':C.accent,flexShrink:0}}>{pct}%</div>
+                                          color:'#2eaa57',flexShrink:0}}>{pct}%</div>
                                       )}
-                                      {l.spot_id && l.strategy && p && (
-                                        <button onClick={()=>onPracticeAgain({log:l, piece:p, spot:sp})}
-                                          style={{padding:'5px 10px',background:'#f5f5f5',
-                                            border:`1px solid ${C.bord}`,borderRadius:8,
-                                            color:'#333',fontFamily:"'Bebas Neue',sans-serif",
-                                            fontSize:'0.7rem',letterSpacing:'0.06em',cursor:'pointer',
-                                            flexShrink:0,WebkitTapHighlightColor:'transparent',
-                                          }}>PRACTICE</button>
+                                      {!isEditing && (
+                                        <div style={{display:'flex',gap:2,flexShrink:0,marginTop:2}}>
+                                          <button onClick={()=>setEditingLog({id:l.id, notes:l.notes||''})} style={{
+                                            background:'none',border:'none',color:'#bbb',cursor:'pointer',
+                                            fontSize:'0.85rem',padding:'2px 4px',WebkitTapHighlightColor:'transparent',
+                                          }}>✎</button>
+                                          <button onClick={()=>setDeletingLog(l.id)} style={{
+                                            background:'none',border:'none',color:'#dbb',cursor:'pointer',
+                                            fontSize:'0.85rem',padding:'2px 4px',WebkitTapHighlightColor:'transparent',
+                                          }}>✕</button>
+                                        </div>
                                       )}
                                     </div>
                                   );
