@@ -2212,9 +2212,9 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                   setTimerRunning(true); setShowTimerPicker(false); setCustomMin('');
                 }} style={{
                   width:58,height:58,borderRadius:10,
-                  background:'#fff',border:'2px solid #34a853',
+                  background:'#fff',border:'2px solid #4a78ff',
                   fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.3rem',
-                  color:'#34a853',cursor:'pointer',WebkitTapHighlightColor:'transparent',
+                  color:'#4a78ff',cursor:'pointer',WebkitTapHighlightColor:'transparent',
                   display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
                 }}>
                   <span>{min}</span>
@@ -2230,7 +2230,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                   border:'2px solid #ccc',fontFamily:"'Bebas Neue',sans-serif",
                   fontSize:'1.2rem',textAlign:'center',color:'#1a1a1a',outline:'none',
                 }}
-                onFocus={e=>{e.target.style.borderColor='#34a853'}}
+                onFocus={e=>{e.target.style.borderColor='#4a78ff'}}
                 onBlur={e=>{e.target.style.borderColor='#ccc'}}
               />
               <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
@@ -2240,7 +2240,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 if(m&&m>0){setTimerTotal(m*60);setTimerLeft(m*60);setTimerRunning(true);setShowTimerPicker(false);setCustomMin('');}
               }} style={{
                 padding:'10px 18px',borderRadius:10,
-                background:customMin&&parseInt(customMin)>0?'#34a853':'#e0e0e0',border:'none',
+                background:customMin&&parseInt(customMin)>0?'#4a78ff':'#e0e0e0',border:'none',
                 fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',letterSpacing:'0.1em',
                 color:customMin&&parseInt(customMin)>0?'#fff':'#999',
                 cursor:customMin&&parseInt(customMin)>0?'pointer':'default',
@@ -2274,7 +2274,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
           style={{
             position:'absolute',left:timerPos.x,top:timerPos.y,zIndex:40,
             background: timerRunning
-              ? 'rgba(52,168,83,0.85)'
+              ? 'rgba(74,120,255,0.85)'
               : 'rgba(150,150,150,0.85)',
             backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
             borderRadius: timerExpanded ? 16 : 24,
@@ -2332,7 +2332,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             maxWidth:'85vw',
           }}>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'2rem',
-              letterSpacing:'0.12em',color:'#34a853',marginBottom:8}}>TIME'S UP</div>
+              letterSpacing:'0.12em',color:'#4a78ff',marginBottom:8}}>TIME'S UP</div>
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
               fontSize:'1.1rem',color:'#666',marginBottom:20}}>
               {Math.round(timerTotal/60)} minute{timerTotal>=120?'s':''} completed
@@ -2344,7 +2344,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 letterSpacing:'0.1em',color:'#666',cursor:'pointer',
               }}>DONE</button>
               <button onClick={()=>{setTimerLeft(timerTotal);setTimerRunning(true);}} style={{
-                padding:'10px 24px',borderRadius:10,background:'#34a853',border:'none',
+                padding:'10px 24px',borderRadius:10,background:'#4a78ff',border:'none',
                 fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
                 letterSpacing:'0.1em',color:'#fff',cursor:'pointer',
               }}>RESTART</button>
