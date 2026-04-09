@@ -104,6 +104,7 @@ const STRAT_NAME = {
   icu: 'Interleaved Click-Up',
   scu: 'Slow Click-Up',
   mur: 'Rhythmic Variation',
+  unguided: 'Unguided',
 };
 const stratName = s => STRAT_NAME[s] || s || 'Practice';
 
@@ -428,6 +429,7 @@ export default function App() {
   const [selectedSpot,setSelectedSpot] = useState(null); // spot object from picker
   const [spotSetup, setSpotSetup]      = useState(null); // {tapPos, nearby[], spotName}
   const [spotName, setSpotName]        = useState('');
+  const [unguidedActive, setUnguidedActive] = useState(false);
   const [strategyNote, setStrategyNote] = useState(null); // {strategy, returnScreen} — pending notes prompt
   const [noteText, setNoteText] = useState('');
   const N = markers.length;
@@ -822,11 +824,61 @@ export default function App() {
             setScuSpot({page:tapPos.page,x:tapPos.x,y:tapPos.y,piece_id:piece?.id||null});
             setScreen('scu');
           }}
+          onUnguided={()=>{
+            setShowOverlay(false);
+            setUnguidedActive(true);
+          }}
           onViewLog={()=>{
             setShowOverlay(false);
             setScreen('spot-log');
           }}
         />
+      )}
+
+      {/* Unguided practice — floating DONE button */}
+      {screen==='score' && unguidedActive && (
+        <div style={{
+          position:'fixed',bottom:30,left:'50%',transform:'translateX(-50%)',
+          zIndex:100,display:'flex',gap:10,alignItems:'center',
+        }}>
+          <div style={{
+            background:'rgba(255,255,255,0.97)',backdropFilter:'blur(12px)',
+            WebkitBackdropFilter:'blur(12px)',borderRadius:14,
+            padding:'12px 20px',boxShadow:'0 4px 24px rgba(0,0,0,0.15)',
+            border:'1px solid rgba(0,0,0,0.08)',
+            display:'flex',alignItems:'center',gap:12,
+          }}>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+              fontSize:'1rem',color:'#666'}}>
+              Practicing: {tapPos?.label || 'spot'}
+            </div>
+            <button onClick={async ()=>{
+              // Log the unguided session
+              const prof = profile || getProfile();
+              if(prof.email) {
+                try {
+                  const sid = await findOrCreateSpot(prof.email, piece?.id, tapPos);
+                  await sbPost('/rest/v1/practice_logs', {
+                    user_email: prof.email,
+                    spot_id: sid,
+                    piece_id: piece?.id||null,
+                    strategy: 'unguided',
+                    session_date: new Date().toISOString().split('T')[0],
+                  });
+                } catch(e){}
+              }
+              setUnguidedActive(false);
+              setStrategyNote({strategy:'unguided'});
+              setNoteText('');
+            }} style={{
+              padding:'10px 20px',borderRadius:10,
+              background:'#888',border:'none',
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
+              letterSpacing:'0.1em',color:'#fff',cursor:'pointer',
+              WebkitTapHighlightColor:'transparent',
+            }}>DONE ✓</button>
+          </div>
+        </div>
       )}
 
       {screen==='mark' && (
@@ -3034,7 +3086,7 @@ function ExerciseCard({ ex, confirmDelete, setConfirmDelete, deleting, onDelete,
 /* ═══════════════════════════════════════════════════════════════════════
    STRATEGY OVERLAY — floating panel over score
 ═══════════════════════════════════════════════════════════════════════ */
-function StrategyOverlay({ piece, profile, tapPos, selectedSpot, onClose, onICU, onRV, onSCU, onViewLog }) {
+function StrategyOverlay({ piece, profile, tapPos, selectedSpot, onClose, onICU, onRV, onSCU, onUnguided, onViewLog }) {
   const [panel, setPanel] = useState('strategies');
   const [nearby, setNearby] = useState([]);
   const [unlocated, setUnlocated] = useState([]);
@@ -3165,13 +3217,26 @@ function StrategyOverlay({ piece, profile, tapPos, selectedSpot, onClose, onICU,
               CHOOSE A PRACTICE STRATEGY
             </div>
 
+            {/* Unguided card */}
+            <button style={{...cardBase,border:`2px solid #888`,background:'transparent'}}
+              onClick={onUnguided}
+              onMouseEnter={e=>e.currentTarget.style.background=C.panel}
+              onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.6rem',
+                letterSpacing:'0.12em',color:'#888'}}>UNGUIDED</div>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                fontSize:'1.05rem',color:C.cream,lineHeight:1.5}}>
+                Practice your way. Tap done when finished to log the session.
+              </div>
+            </button>
+
             {/* ICU card */}
             <button style={{...cardBase,border:`2px solid ${C.accent}`,background:'transparent'}}
               onClick={onICU}
               onMouseEnter={e=>e.currentTarget.style.background=C.panel}
               onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.6rem',
-                letterSpacing:'0.12em',color:C.accent}}>INTERLEAVED CLICK-UP</div>
+                letterSpacing:'0.12em',color:C.accent}}>INTERLEAVED CLICK-UP — APP GUIDED</div>
               <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
                 fontSize:'1.05rem',color:C.cream,lineHeight:1.5}}>
                 Build speed gradually — add one unit at a time, cycling through tempo increments.
@@ -3184,7 +3249,7 @@ function StrategyOverlay({ piece, profile, tapPos, selectedSpot, onClose, onICU,
               onMouseEnter={e=>e.currentTarget.style.background=C.panel}
               onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.6rem',
-                letterSpacing:'0.12em',color:C.gold}}>RHYTHMIC VARIATION</div>
+                letterSpacing:'0.12em',color:C.gold}}>RHYTHMIC VARIATION — APP GUIDED</div>
               <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
                 fontSize:'1.05rem',color:C.cream,lineHeight:1.5}}>
                 Practice your passage in every rhythm pattern — a complete systematic workout.
@@ -3197,7 +3262,7 @@ function StrategyOverlay({ piece, profile, tapPos, selectedSpot, onClose, onICU,
               onMouseEnter={e=>e.currentTarget.style.background=C.panel}
               onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.6rem',
-                letterSpacing:'0.12em',color:'#3db06a'}}>SLOW CLICK-UP</div>
+                letterSpacing:'0.12em',color:'#3db06a'}}>SLOW CLICK-UP — APP GUIDED</div>
               <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
                 fontSize:'1.05rem',color:C.cream,lineHeight:1.5}}>
                 Nail 10 clean reps before advancing tempo. Track your progress over time.
