@@ -5595,8 +5595,14 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
 
           {/* Single NEXT button */}
           <button onClick={()=>{
+            // At or past goal tempo → jump to next phase
+            if(step.tempo >= goalTempo && hasNextPhase) {
+              setIdx(nextPhaseIdx);
+              return;
+            }
             const nextIdx = idx + 1;
             if(nextIdx >= steps.length) { handleDone(); return; }
+            // Crossing phase boundary naturally
             if(steps[nextIdx].phase !== step.phase && hasNextPhase) {
               setIdx(nextPhaseIdx);
             } else {
