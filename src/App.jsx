@@ -655,8 +655,7 @@ export default function App() {
               }
               // Always show spot setup popover
               setSpotSetup({tapPos:pos, nearby, screenX: pos.screenX||0, screenY: pos.screenY||0});
-              const region = pos.y < 0.33 ? 'top' : pos.y < 0.66 ? 'middle' : 'bottom';
-              setSpotName(nearby.length > 0 ? '' : `Page ${pos.page+1}, ${region}`);
+              setSpotName('');
             }
           }}
         />
@@ -5583,17 +5582,6 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
         <button onClick={onBack} style={{background:'none',border:`1px solid ${C.bord2}`,color:C.cream,padding:'6px 10px',cursor:'pointer',fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',letterSpacing:'0.1em',flexShrink:0}}>← EXIT</button>
 
         <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
-          {/* NEXT PHASE — left of metronome */}
-          <button onClick={()=>setIdx(nextPhaseIdx)} disabled={!hasNextPhase} style={{
-            background:hasNextPhase?C.panel:'transparent',
-            border:`1px solid ${hasNextPhase?C.bord2:'#333'}`,
-            color:hasNextPhase?C.cream:'#444',
-            padding:compact?'5px 8px':'6px 10px',
-            fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?'0.7rem':'0.8rem',
-            letterSpacing:'0.08em',cursor:hasNextPhase?'pointer':'default',
-            flexShrink:0,WebkitTapHighlightColor:'transparent',lineHeight:1.2,
-          }}>« NEXT<br/>PHASE</button>
-
           {/* Tempo display */}
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?'clamp(1.4rem,4vw,2rem)':'clamp(1.8rem,7vw,2.6rem)',color:atGoal?C.accent:C.cream,lineHeight:1}}>
             ♩ = {step.tempo}
@@ -5605,16 +5593,24 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
             {metroOn?'⏸':'▶'}
           </button>
 
-          {/* NEXT STEP — right of metronome */}
-          <button onClick={()=>setIdx(i=>Math.min(steps.length-1,i+1))} disabled={idx>=steps.length-1} style={{
-            background:idx<steps.length-1?C.accent:'transparent',
-            border:`1px solid ${idx<steps.length-1?C.accent:'#333'}`,
-            color:idx<steps.length-1?'white':'#444',
-            padding:compact?'5px 8px':'6px 10px',
-            fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?'0.7rem':'0.8rem',
-            letterSpacing:'0.08em',cursor:idx<steps.length-1?'pointer':'default',
-            flexShrink:0,WebkitTapHighlightColor:'transparent',lineHeight:1.2,
-          }}>NEXT »<br/>STEP</button>
+          {/* Single NEXT button */}
+          <button onClick={()=>{
+            const nextIdx = idx + 1;
+            if(nextIdx >= steps.length) { handleDone(); return; }
+            if(steps[nextIdx].phase !== step.phase && hasNextPhase) {
+              setIdx(nextPhaseIdx);
+            } else {
+              setIdx(nextIdx);
+            }
+          }} disabled={idx>=steps.length-1 && !hasNextPhase} style={{
+            background: idx<steps.length-1||hasNextPhase ? C.accent : 'transparent',
+            border:`1px solid ${idx<steps.length-1||hasNextPhase ? C.accent : '#333'}`,
+            color: idx<steps.length-1||hasNextPhase ? 'white' : '#444',
+            padding:compact?'5px 12px':'6px 14px',
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?'0.8rem':'0.9rem',
+            letterSpacing:'0.08em',cursor:idx<steps.length-1||hasNextPhase?'pointer':'default',
+            flexShrink:0,WebkitTapHighlightColor:'transparent',borderRadius:4,
+          }}>NEXT →</button>
         </div>
 
         <button onClick={handleDone} style={{
