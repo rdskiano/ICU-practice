@@ -660,7 +660,7 @@ export default function App() {
                   try {
                     const r = await sbGet(`/rest/v1/practice_spots?user_email=eq.${encodeURIComponent(prof.email)}&piece_id=eq.${piece.id}&score_page=eq.${pos.page}`);
                     const allSpots = await r.json()||[];
-                    nearby = allSpots.filter(s => Math.abs(s.score_y - pos.y) < 0.06 && Math.abs(s.score_x - pos.x) < 0.06);
+                    nearby = allSpots.filter(s => Math.abs(s.score_y - pos.y) < 0.10 && Math.abs(s.score_x - pos.x) < 0.10);
                   } catch(e) {}
                 }
                 const closest = nearby.length > 0 ? nearby.reduce((a,b) => Math.abs(a.score_y - pos.y) < Math.abs(b.score_y - pos.y) ? a : b) : null;
@@ -680,7 +680,7 @@ export default function App() {
                 try {
                   const r = await sbGet(`/rest/v1/practice_spots?user_email=eq.${encodeURIComponent(prof.email)}&piece_id=eq.${piece.id}&score_page=eq.${pos.page}`);
                   const allSpots = await r.json()||[];
-                  nearby = allSpots.filter(s => Math.abs(s.score_y - pos.y) < 0.06 && Math.abs(s.score_x - pos.x) < 0.06);
+                  nearby = allSpots.filter(s => Math.abs(s.score_y - pos.y) < 0.10 && Math.abs(s.score_x - pos.x) < 0.10);
                 } catch(e) { console.error('spot check failed', e); }
               }
               // Always show spot setup popover
