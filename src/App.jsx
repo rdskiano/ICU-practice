@@ -268,16 +268,25 @@ function AudioPlayBtn({audioKey}) {
   const [playing, setPlaying] = useState(false);
   const aRef = useRef(null);
   const play = () => {
-    if(playing) { aRef.current?.pause(); setPlaying(false); return; }
+    if(playing) { aRef.current?.pause(); aRef.current=null; setPlaying(false); return; }
     try {
       const b64 = localStorage.getItem(audioKey);
       if(!b64) return;
-      const a = new Audio(b64);
-      a.onended = ()=>setPlaying(false);
-      a.play();
+      // Convert data URL to blob for reliable iOS playback
+      const parts = b64.split(',');
+      const mime = parts[0].match(/:(.*?);/)?.[1] || 'audio/mp4';
+      const raw = atob(parts[1]);
+      const arr = new Uint8Array(raw.length);
+      for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+      const blob = new Blob([arr], {type:mime});
+      const url = URL.createObjectURL(blob);
+      const a = new Audio(url);
+      a.onended = ()=>{setPlaying(false);URL.revokeObjectURL(url);};
+      a.onerror = ()=>{setPlaying(false);URL.revokeObjectURL(url);};
+      a.play().then(()=>setPlaying(true)).catch(()=>{setPlaying(false);URL.revokeObjectURL(url);});
       aRef.current = a;
       setPlaying(true);
-    } catch(e){}
+    } catch(e){ console.error('playback error',e); }
   };
   return (
     <button onClick={play} style={{
@@ -1846,31 +1855,45 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   // Audio recorder
   const [showRecorder, setShowRecorder] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [recordings, setRecordings] = useState([]); // [{url, date, duration}]
+  const [recordings, setRecordings] = useState([]); // [{url, blob, date, duration, mime}]
   const [playingIdx, setPlayingIdx] = useState(null);
   const [recDuration, setRecDuration] = useState(0);
+  const [recPos, setRecPos] = useState({x: null, y: null}); // null = default position
   const recorderRef = useRef(null);
   const recChunks = useRef([]);
   const recTimer = useRef(null);
   const recStart = useRef(0);
   const audioRef = useRef(null);
+  const recDragRef = useRef(null);
+
+  const getRecMime = () => {
+    // iOS Safari supports mp4, Chrome/Firefox support webm
+    if(typeof MediaRecorder==='undefined') return null;
+    for(const t of ['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg']) {
+      try { if(MediaRecorder.isTypeSupported(t)) return t; } catch(e){}
+    }
+    return '';
+  };
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-      const mr = new MediaRecorder(stream);
+      const mime = getRecMime();
+      const opts = mime ? {mimeType:mime} : {};
+      const mr = new MediaRecorder(stream, opts);
       recChunks.current = [];
       mr.ondataavailable = e => { if(e.data.size>0) recChunks.current.push(e.data); };
       mr.onstop = () => {
         stream.getTracks().forEach(t=>t.stop());
-        const blob = new Blob(recChunks.current, {type:'audio/webm'});
+        const usedMime = mr.mimeType || mime || 'audio/webm';
+        const blob = new Blob(recChunks.current, {type:usedMime});
         const url = URL.createObjectURL(blob);
         const dur = Math.round((Date.now()-recStart.current)/1000);
-        setRecordings(prev=>[{url, date:new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}), duration:dur}, ...prev]);
+        setRecordings(prev=>[{url, blob, date:new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}), duration:dur, mime:usedMime}, ...prev]);
         setRecDuration(0);
       };
       recorderRef.current = mr;
-      mr.start();
+      mr.start(250); // collect data every 250ms for reliability
       recStart.current = Date.now();
       setRecording(true);
       setRecDuration(0);
@@ -1889,11 +1912,15 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const playRecording = (idx) => {
     if(audioRef.current) { audioRef.current.pause(); audioRef.current=null; }
     if(playingIdx===idx) { setPlayingIdx(null); return; }
-    const a = new Audio(recordings[idx].url);
-    a.onended = ()=>setPlayingIdx(null);
-    a.play();
-    audioRef.current = a;
-    setPlayingIdx(idx);
+    try {
+      const a = new Audio();
+      a.src = recordings[idx].url;
+      a.onended = ()=>setPlayingIdx(null);
+      a.onerror = ()=>setPlayingIdx(null);
+      a.play().catch(()=>setPlayingIdx(null));
+      audioRef.current = a;
+      setPlayingIdx(idx);
+    } catch(e) { setPlayingIdx(null); }
   };
 
   const deleteRecording = (idx) => {
@@ -1906,19 +1933,15 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
     const rec = recordings[idx];
     if(rec.saved) return;
     try {
-      // Convert blob URL to base64 for localStorage
-      const resp = await fetch(rec.url);
-      const blob = await resp.blob();
       const reader = new FileReader();
       const b64 = await new Promise((res,rej)=>{
         reader.onload=()=>res(reader.result);
         reader.onerror=rej;
-        reader.readAsDataURL(blob);
+        reader.readAsDataURL(rec.blob);
       });
       const audioKey = `pfn_audio_${Date.now()}`;
       localStorage.setItem(audioKey, b64);
 
-      // Create practice log entry
       const prof = profile || getProfile();
       if(prof.email) {
         await sbPost('/rest/v1/practice_logs', {
@@ -2791,14 +2814,32 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
 
       {/* Floating recorder */}
       {showRecorder && (
-        <div style={{
-          position:'absolute',bottom: pencilMode ? 90 : 20,right:16,
-          zIndex:36,background:'rgba(50,50,50,0.95)',
-          backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
-          borderRadius:16,padding:'14px 16px',
-          boxShadow:'0 4px 24px rgba(0,0,0,0.25)',
-          width:220,display:'flex',flexDirection:'column',gap:10,
-        }}>
+        <div
+          onTouchStart={e=>{
+            const t=e.touches[0];
+            const pos = recPos.x!=null ? recPos : {x:window.innerWidth-236, y:window.innerHeight-200};
+            recDragRef.current={sx:t.clientX-pos.x, sy:t.clientY-pos.y, moved:false};
+            if(recPos.x==null) setRecPos(pos);
+          }}
+          onTouchMove={e=>{
+            if(!recDragRef.current) return;
+            if(e.target.tagName==='BUTTON') return;
+            e.preventDefault();
+            const t=e.touches[0];
+            recDragRef.current.moved=true;
+            setRecPos({x:t.clientX-recDragRef.current.sx, y:t.clientY-recDragRef.current.sy});
+          }}
+          onTouchEnd={()=>{recDragRef.current=null;}}
+          style={{
+            position:'absolute',
+            ...(recPos.x!=null ? {left:recPos.x, top:recPos.y} : {bottom: pencilMode ? 90 : 20, right:16}),
+            zIndex:36,background:'rgba(50,50,50,0.95)',
+            backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
+            borderRadius:16,padding:'14px 16px',
+            boxShadow:'0 4px 24px rgba(0,0,0,0.25)',
+            width:220,display:'flex',flexDirection:'column',gap:10,
+            cursor:'grab',touchAction:'none',userSelect:'none',WebkitUserSelect:'none',
+          }}>
           {/* Header */}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
