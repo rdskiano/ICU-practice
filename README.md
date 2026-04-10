@@ -1,6 +1,6 @@
-# Interleaved Click-Up Method
+# Play Fast Notes
 
-A guided practice app for musicians using the Interleaved Click-Up method.
+A guided practice app for musicians learning difficult technical music.
 
 ## Deploying to Netlify (one-time setup)
 
