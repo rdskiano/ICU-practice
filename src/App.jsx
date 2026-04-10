@@ -105,6 +105,7 @@ const STRAT_NAME = {
   scu: 'Slow Click-Up',
   mur: 'Rhythmic Variation',
   unguided: 'Unguided',
+  recording: 'Recording',
 };
 const stratName = s => STRAT_NAME[s] || s || 'Practice';
 const localDate = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
@@ -261,6 +262,41 @@ const SubdivBtns = ({subdiv, setSubdiv, metro, metroOn, bpm, compact}) => (
     ))}
   </div>
 );
+
+// Audio playback from localStorage
+function AudioPlayBtn({audioKey}) {
+  const [playing, setPlaying] = useState(false);
+  const aRef = useRef(null);
+  const play = () => {
+    if(playing) { aRef.current?.pause(); setPlaying(false); return; }
+    try {
+      const b64 = localStorage.getItem(audioKey);
+      if(!b64) return;
+      const a = new Audio(b64);
+      a.onended = ()=>setPlaying(false);
+      a.play();
+      aRef.current = a;
+      setPlaying(true);
+    } catch(e){}
+  };
+  return (
+    <button onClick={play} style={{
+      display:'inline-flex',alignItems:'center',gap:4,
+      background: playing ? 'rgba(220,50,50,0.12)' : 'rgba(220,50,50,0.06)',
+      border:`1px solid ${playing ? 'rgba(220,50,50,0.3)' : 'rgba(220,50,50,0.15)'}`,
+      borderRadius:8,padding:'4px 10px',cursor:'pointer',
+      fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.75rem',
+      letterSpacing:'0.06em',color:'#dc3232',
+      WebkitTapHighlightColor:'transparent',marginTop:4,
+    }}>{playing?'⏸ STOP':'▶ PLAY RECORDING'}</button>
+  );
+}
+const parseAudioKey = (notes) => {
+  if(!notes) return null;
+  const m = notes.match(/\[audio:(pfn_audio_\d+)\]/);
+  return m ? m[1] : null;
+};
+const stripAudioTag = (notes) => notes ? notes.replace(/\s*\[audio:pfn_audio_\d+\]/, '').trim() : '';
 
 /* ═══════════════════════════════════════════════════════════════════════
    MUR — PITCH / ABC HELPERS
@@ -1486,7 +1522,7 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
                 if(diff<30) return `${Math.floor(diff/7)} week${Math.floor(diff/7)>1?'s':''} ago`;
                 return `${Math.floor(diff/30)} month${Math.floor(diff/30)>1?'s':''} ago`;
               };
-              const stratColor = s => s==='icu'?C.accent:s==='mur'?C.gold:s==='scu'?'#2eaa57':'#999';
+              const stratColor = s => s==='icu'?C.accent:s==='mur'?C.gold:s==='scu'?'#2eaa57':s==='recording'?'#dc3232':'#999';
 
               // Group: date → piece → spot → entries
               const byDate = {};
@@ -1598,14 +1634,17 @@ function LibraryScreen({ profile, onSelectRepertoire, onLoadExercise, onLocateEx
                                               }}>CANCEL</button>
                                             </div>
                                           </div>
-                                        ) : (
-                                          l.notes && (
+                                        ) : (<>
+                                          {l.notes && stripAudioTag(l.notes) && (
                                             <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
                                               fontSize:'1.05rem',color:'#555',marginTop:3,lineHeight:1.4}}>
-                                              {l.notes}
+                                              {stripAudioTag(l.notes)}
                                             </div>
-                                          )
-                                        )}
+                                          )}
+                                          {parseAudioKey(l.notes) && (
+                                            <AudioPlayBtn audioKey={parseAudioKey(l.notes)} />
+                                          )}
+                                        </>)}
                                       </div>
                                       {pct !== null && l.strategy === 'scu' && (
                                         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',
@@ -1803,6 +1842,99 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
     }
     annotCurrent.current = [];
   };
+
+  // Audio recorder
+  const [showRecorder, setShowRecorder] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordings, setRecordings] = useState([]); // [{url, date, duration}]
+  const [playingIdx, setPlayingIdx] = useState(null);
+  const [recDuration, setRecDuration] = useState(0);
+  const recorderRef = useRef(null);
+  const recChunks = useRef([]);
+  const recTimer = useRef(null);
+  const recStart = useRef(0);
+  const audioRef = useRef(null);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      const mr = new MediaRecorder(stream);
+      recChunks.current = [];
+      mr.ondataavailable = e => { if(e.data.size>0) recChunks.current.push(e.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach(t=>t.stop());
+        const blob = new Blob(recChunks.current, {type:'audio/webm'});
+        const url = URL.createObjectURL(blob);
+        const dur = Math.round((Date.now()-recStart.current)/1000);
+        setRecordings(prev=>[{url, date:new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}), duration:dur}, ...prev]);
+        setRecDuration(0);
+      };
+      recorderRef.current = mr;
+      mr.start();
+      recStart.current = Date.now();
+      setRecording(true);
+      setRecDuration(0);
+      recTimer.current = setInterval(()=>setRecDuration(d=>d+1), 1000);
+    } catch(e) { console.error('mic access denied', e); }
+  };
+
+  const stopRecording = () => {
+    if(recorderRef.current && recorderRef.current.state==='recording') {
+      recorderRef.current.stop();
+    }
+    setRecording(false);
+    clearInterval(recTimer.current);
+  };
+
+  const playRecording = (idx) => {
+    if(audioRef.current) { audioRef.current.pause(); audioRef.current=null; }
+    if(playingIdx===idx) { setPlayingIdx(null); return; }
+    const a = new Audio(recordings[idx].url);
+    a.onended = ()=>setPlayingIdx(null);
+    a.play();
+    audioRef.current = a;
+    setPlayingIdx(idx);
+  };
+
+  const deleteRecording = (idx) => {
+    if(playingIdx===idx) { audioRef.current?.pause(); setPlayingIdx(null); }
+    URL.revokeObjectURL(recordings[idx].url);
+    setRecordings(prev=>prev.filter((_,i)=>i!==idx));
+  };
+
+  const saveRecording = async (idx) => {
+    const rec = recordings[idx];
+    if(rec.saved) return;
+    try {
+      // Convert blob URL to base64 for localStorage
+      const resp = await fetch(rec.url);
+      const blob = await resp.blob();
+      const reader = new FileReader();
+      const b64 = await new Promise((res,rej)=>{
+        reader.onload=()=>res(reader.result);
+        reader.onerror=rej;
+        reader.readAsDataURL(blob);
+      });
+      const audioKey = `pfn_audio_${Date.now()}`;
+      localStorage.setItem(audioKey, b64);
+
+      // Create practice log entry
+      const prof = profile || getProfile();
+      if(prof.email) {
+        await sbPost('/rest/v1/practice_logs', {
+          user_email: prof.email,
+          piece_id: piece?.id||null,
+          spot_id: null,
+          strategy: 'recording',
+          session_date: localDate(),
+          notes: `🎙 Recording (${fmtDur(rec.duration)}) [audio:${audioKey}]`,
+        });
+      }
+      setRecordings(prev=>prev.map((r,i)=>i===idx?{...r,saved:true}:r));
+    } catch(e) { console.error('save recording failed', e); }
+  };
+
+  const fmtDur = s => `${Math.floor(s/60)}:${(s%60)<10?'0':''}${s%60}`;
 
   useEffect(()=>{
     if(!timerRunning || timerLeft==null) return;
@@ -2656,6 +2788,102 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
       )}
 
       {/* Pencil annotation toolbar */}
+
+      {/* Floating recorder */}
+      {showRecorder && (
+        <div style={{
+          position:'absolute',bottom: pencilMode ? 90 : 20,right:16,
+          zIndex:36,background:'rgba(50,50,50,0.95)',
+          backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
+          borderRadius:16,padding:'14px 16px',
+          boxShadow:'0 4px 24px rgba(0,0,0,0.25)',
+          width:220,display:'flex',flexDirection:'column',gap:10,
+        }}>
+          {/* Header */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
+              letterSpacing:'0.1em',color:'#fff'}}>
+              🎙 RECORDER
+            </div>
+            <button onClick={()=>{if(recording)stopRecording();setShowRecorder(false);}} style={{
+              background:'none',border:'none',color:'#999',fontSize:'1rem',
+              cursor:'pointer',padding:'0 2px',WebkitTapHighlightColor:'transparent',
+            }}>✕</button>
+          </div>
+
+          {/* Record controls */}
+          <div style={{display:'flex',alignItems:'center',gap:10,justifyContent:'center'}}>
+            {!recording ? (
+              <button onClick={startRecording} style={{
+                width:52,height:52,borderRadius:'50%',
+                background:'#dc3232',border:'3px solid rgba(255,255,255,0.3)',
+                cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+                WebkitTapHighlightColor:'transparent',
+                boxShadow:'0 0 0 4px rgba(220,50,50,0.3)',
+              }}>
+                <div style={{width:20,height:20,borderRadius:'50%',background:'#fff'}}/>
+              </button>
+            ) : (
+              <button onClick={stopRecording} style={{
+                width:52,height:52,borderRadius:'50%',
+                background:'#dc3232',border:'3px solid rgba(255,255,255,0.3)',
+                cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+                WebkitTapHighlightColor:'transparent',
+                animation:'pulse 1.5s infinite',
+                boxShadow:'0 0 0 4px rgba(220,50,50,0.3)',
+              }}>
+                <div style={{width:18,height:18,borderRadius:3,background:'#fff'}}/>
+              </button>
+            )}
+            {recording && (
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',
+                color:'#dc3232',letterSpacing:'0.05em',minWidth:50}}>
+                {fmtDur(recDuration)}
+              </div>
+            )}
+          </div>
+
+          {/* Recordings list */}
+          {recordings.length > 0 && (
+            <div style={{display:'flex',flexDirection:'column',gap:4,
+              maxHeight:150,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+              {recordings.map((r,i)=>(
+                <div key={i} style={{display:'flex',alignItems:'center',gap:8,
+                  padding:'6px 8px',background:'rgba(255,255,255,0.08)',borderRadius:8}}>
+                  <button onClick={()=>playRecording(i)} style={{
+                    width:28,height:28,borderRadius:'50%',
+                    background: playingIdx===i ? '#dc3232' : 'rgba(255,255,255,0.15)',
+                    border:'1px solid rgba(255,255,255,0.3)',
+                    color:'#fff',fontSize:'0.75rem',cursor:'pointer',
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    WebkitTapHighlightColor:'transparent',
+                  }}>{playingIdx===i?'⏸':'▶'}</button>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                      color:'#fff',letterSpacing:'0.06em'}}>
+                      {r.date} · {fmtDur(r.duration)}
+                    </div>
+                  </div>
+                  <button onClick={()=>deleteRecording(i)} style={{
+                    background:'none',border:'none',color:'#888',fontSize:'0.9rem',
+                    cursor:'pointer',padding:'2px 4px',WebkitTapHighlightColor:'transparent',
+                  }}>✕</button>
+                  <button onClick={()=>saveRecording(i)} style={{
+                    background: r.saved ? 'rgba(46,170,87,0.3)' : 'rgba(255,255,255,0.15)',
+                    border:'1px solid rgba(255,255,255,0.3)',
+                    borderRadius:6,padding:'3px 8px',
+                    fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',
+                    letterSpacing:'0.06em',color:'#fff',cursor: r.saved?'default':'pointer',
+                    WebkitTapHighlightColor:'transparent',
+                  }}>{r.saved?'✓ SAVED':'SAVE'}</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Pencil annotation toolbar */}
       {pencilMode && (
         <div style={{
           position:'absolute',bottom:20,left:'50%',transform:'translateX(-50%)',
@@ -2893,6 +3121,15 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 letterSpacing:'0.08em',cursor:'pointer',
                 WebkitTapHighlightColor:'transparent',
               }}>{pencilMode ? '✏️ PENCIL ON' : '✏️ PENCIL'}</button>
+              <button onClick={()=>setShowRecorder(true)} style={{
+                background: recording ? 'rgba(220,50,50,0.18)' : 'rgba(220,50,50,0.08)',
+                border: `1px solid ${recording ? 'rgba(220,50,50,0.35)' : 'rgba(220,50,50,0.18)'}`,
+                color: recording ? '#dc3232' : '#c87070',
+                padding:'4px 10px',borderRadius:12,
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',
+                letterSpacing:'0.08em',cursor:'pointer',
+                WebkitTapHighlightColor:'transparent',
+              }}>{recording ? '⏺ REC' : '🎙 RECORD'}</button>
               <button onClick={()=>setShowTempoTrackers(t=>!t)} style={{
                 background: showTempoTrackers ? 'rgba(46,170,87,0.18)' : 'rgba(46,170,87,0.08)',
                 border: `1px solid ${showTempoTrackers ? 'rgba(46,170,87,0.35)' : 'rgba(46,170,87,0.18)'}`,
@@ -5589,7 +5826,7 @@ function SpotLogScreen({ profile, piece, tapPos, onBack, onPracticeAgain }) {
     if(diff<30) return `${Math.floor(diff/7)} week${Math.floor(diff/7)>1?'s':''} ago`;
     return `${Math.floor(diff/30)} month${Math.floor(diff/30)>1?'s':''} ago`;
   };
-  const stratColor = s => s==='icu'?C.accent:s==='mur'?C.gold:s==='scu'?'#2eaa57':'#999';
+  const stratColor = s => s==='icu'?C.accent:s==='mur'?C.gold:s==='scu'?'#2eaa57':s==='recording'?'#dc3232':'#999';
 
   const byDate = {};
   logs.forEach(l => {
@@ -5647,14 +5884,17 @@ function SpotLogScreen({ profile, piece, tapPos, onBack, onPracticeAgain }) {
                 }}>CANCEL</button>
               </div>
             </div>
-          ) : (
-            l.notes && (
+          ) : (<>
+            {l.notes && stripAudioTag(l.notes) && (
               <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
                 fontSize:'1.05rem',color:'#555',marginTop:3,lineHeight:1.4}}>
-                {l.notes}
+                {stripAudioTag(l.notes)}
               </div>
-            )
-          )}
+            )}
+            {parseAudioKey(l.notes) && (
+              <AudioPlayBtn audioKey={parseAudioKey(l.notes)} />
+            )}
+          </>)}
         </div>
         {pct !== null && l.strategy === 'scu' && (
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',
