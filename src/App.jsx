@@ -455,6 +455,7 @@ export default function App() {
           onSelectRepertoire={(p,imgs)=>{
             setPiece(p);setPageImages(imgs);
             setMarkers([]);setCurrentPage(0);
+            setSessionMode('massed');setInterleavedSpots([]);
             setScreen('score');
           }}
           onLoadExercise={ex=>{
@@ -2567,9 +2568,9 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               }} style={{
                 fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',
                 letterSpacing:'0.06em',padding:'5px 10px',borderRadius:6,
-                background:'transparent',color:'#666',border:`1px solid #ddd`,
+                background:'transparent',color:'#9b59b6',border:`1.5px solid #9b59b6`,
                 cursor:'pointer',WebkitTapHighlightColor:'transparent',
-              }}>← BLOCKED</button>
+              }}>BACK TO NORMAL</button>
               <button onClick={onStartSession} disabled={interleavedSpots.length<1} style={{
                 fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
                 letterSpacing:'0.1em',padding:'7px 14px',borderRadius:6,
