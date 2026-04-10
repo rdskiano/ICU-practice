@@ -1683,6 +1683,127 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   useEffect(()=>{placeMet.current.setBpm(metroBpm);},[metroBpm]);
   useEffect(()=>()=>placeMet.current.stop(),[]);
 
+  // Annotation (Apple Pencil)
+  const [pencilMode, setPencilMode] = useState(false);
+  const [pencilColor, setPencilColor] = useState('#e74c3c');
+  const [pencilWidth, setPencilWidth] = useState(2);
+  const [eraserOn, setEraserOn] = useState(false);
+  const annotKey = piece?.id ? `pfn_annot_${piece.id}` : null;
+  const [annotations, setAnnotations] = useState(()=>{
+    if(!annotKey) return {};
+    try { return JSON.parse(localStorage.getItem(annotKey)||'{}'); } catch { return {}; }
+  });
+  useEffect(()=>{
+    if(annotKey) localStorage.setItem(annotKey, JSON.stringify(annotations));
+  },[annotations, annotKey]);
+  const annotCanvasRef = useRef(null);
+  const annotDrawing = useRef(false);
+  const annotCurrent = useRef([]);
+
+  const drawAnnotations = useCallback((canvas, pageNum) => {
+    if(!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const strokes = annotations[pageNum] || [];
+    strokes.forEach(s => {
+      if(s.points.length < 2) return;
+      ctx.beginPath();
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = s.width;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.moveTo(s.points[0].x * canvas.width, s.points[0].y * canvas.height);
+      for(let i = 1; i < s.points.length; i++) {
+        ctx.lineTo(s.points[i].x * canvas.width, s.points[i].y * canvas.height);
+      }
+      ctx.stroke();
+    });
+  },[annotations]);
+
+  // Redraw annotations when page changes or annotations update
+  useEffect(()=>{
+    if(annotCanvasRef.current) drawAnnotations(annotCanvasRef.current, currentPage);
+  },[currentPage, annotations, drawAnnotations]);
+
+  // Resize canvas when image resizes
+  useEffect(()=>{
+    if(!annotCanvasRef.current) return;
+    const ro = new ResizeObserver(()=>{
+      const el = annotCanvasRef.current;
+      if(!el) return;
+      const img = el.parentElement?.querySelector('img');
+      if(img && img.clientWidth) {
+        el.width = img.clientWidth; el.height = img.clientHeight;
+        drawAnnotations(el, currentPage);
+      }
+    });
+    const img = annotCanvasRef.current.parentElement?.querySelector('img');
+    if(img) ro.observe(img);
+    return ()=>ro.disconnect();
+  },[currentPage, drawAnnotations]);
+
+  const handleAnnotPointerDown = (e) => {
+    if(!pencilMode) return;
+    // Only respond to pen or touch when in pencil mode
+    const canvas = annotCanvasRef.current;
+    if(!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    if(eraserOn) {
+      // Erase strokes near this point
+      setAnnotations(prev => {
+        const strokes = prev[currentPage] || [];
+        const filtered = strokes.filter(s => {
+          return !s.points.some(p => Math.abs(p.x - x) < 0.02 && Math.abs(p.y - y) < 0.02);
+        });
+        return {...prev, [currentPage]: filtered};
+      });
+      return;
+    }
+
+    annotDrawing.current = true;
+    annotCurrent.current = [{x, y}];
+  };
+
+  const handleAnnotPointerMove = (e) => {
+    if(!annotDrawing.current || !pencilMode || eraserOn) return;
+    const canvas = annotCanvasRef.current;
+    if(!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    annotCurrent.current.push({x, y});
+
+    // Live preview
+    const ctx = canvas.getContext('2d');
+    const pts = annotCurrent.current;
+    if(pts.length >= 2) {
+      const prev = pts[pts.length - 2];
+      ctx.beginPath();
+      ctx.strokeStyle = pencilColor;
+      ctx.lineWidth = pencilWidth;
+      ctx.lineCap = 'round';
+      ctx.moveTo(prev.x * canvas.width, prev.y * canvas.height);
+      ctx.lineTo(x * canvas.width, y * canvas.height);
+      ctx.stroke();
+    }
+  };
+
+  const handleAnnotPointerUp = () => {
+    if(!annotDrawing.current) return;
+    annotDrawing.current = false;
+    if(annotCurrent.current.length >= 2) {
+      const newStroke = {points: [...annotCurrent.current], color: pencilColor, width: pencilWidth};
+      setAnnotations(prev => ({
+        ...prev,
+        [currentPage]: [...(prev[currentPage]||[]), newStroke],
+      }));
+    }
+    annotCurrent.current = [];
+  };
+
   useEffect(()=>{
     if(!timerRunning || timerLeft==null) return;
     if(timerLeft <= 0) {
@@ -2534,6 +2655,83 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         </div>
       )}
 
+      {/* Pencil annotation toolbar */}
+      {pencilMode && (
+        <div style={{
+          position:'absolute',bottom:20,left:'50%',transform:'translateX(-50%)',
+          zIndex:35,background:'rgba(80,80,80,0.95)',
+          backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
+          borderRadius:16,padding:'10px 16px',
+          boxShadow:'0 4px 24px rgba(0,0,0,0.25)',
+          display:'flex',alignItems:'center',gap:10,
+        }}>
+          {/* Colors */}
+          {[
+            {c:'#e74c3c',label:'Red'},
+            {c:'#3498db',label:'Blue'},
+            {c:'#2ecc71',label:'Green'},
+            {c:'#f39c12',label:'Orange'},
+            {c:'#1a1a1a',label:'Black'},
+          ].map(({c})=>(
+            <button key={c} onClick={()=>{setPencilColor(c);setEraserOn(false);}} style={{
+              width:28,height:28,borderRadius:'50%',background:c,
+              border: pencilColor===c && !eraserOn ? '3px solid #fff' : '2px solid rgba(255,255,255,0.3)',
+              cursor:'pointer',WebkitTapHighlightColor:'transparent',
+              boxShadow: pencilColor===c && !eraserOn ? '0 0 0 2px rgba(255,255,255,0.5)' : 'none',
+            }}/>
+          ))}
+
+          <div style={{width:1,height:24,background:'rgba(255,255,255,0.2)'}}/>
+
+          {/* Line width */}
+          {[{w:1,sz:10},{w:3,sz:16},{w:5,sz:22}].map(({w,sz})=>(
+            <button key={w} onClick={()=>{setPencilWidth(w);setEraserOn(false);}} style={{
+              width:30,height:30,borderRadius:8,
+              background: pencilWidth===w && !eraserOn ? 'rgba(255,255,255,0.25)' : 'transparent',
+              border:'1px solid rgba(255,255,255,0.2)',
+              cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+              WebkitTapHighlightColor:'transparent',
+            }}>
+              <div style={{width:sz,height:sz,borderRadius:'50%',background: !eraserOn && pencilWidth===w ? pencilColor : 'rgba(255,255,255,0.5)'}}/>
+            </button>
+          ))}
+
+          <div style={{width:1,height:24,background:'rgba(255,255,255,0.2)'}}/>
+
+          {/* Eraser */}
+          <button onClick={()=>setEraserOn(e=>!e)} style={{
+            background: eraserOn ? 'rgba(255,255,255,0.3)' : 'transparent',
+            border:'1px solid rgba(255,255,255,0.3)',
+            borderRadius:8,padding:'4px 10px',
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+            letterSpacing:'0.06em',color:'#fff',cursor:'pointer',
+            WebkitTapHighlightColor:'transparent',
+          }}>ERASER</button>
+
+          {/* Clear page */}
+          <button onClick={()=>{
+            setAnnotations(prev=>({...prev,[currentPage]:[]}));
+          }} style={{
+            background:'transparent',
+            border:'1px solid rgba(255,200,200,0.4)',
+            borderRadius:8,padding:'4px 10px',
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+            letterSpacing:'0.06em',color:'#f88',cursor:'pointer',
+            WebkitTapHighlightColor:'transparent',
+          }}>CLEAR</button>
+
+          {/* Close */}
+          <button onClick={()=>setPencilMode(false)} style={{
+            background:'transparent',
+            border:'1px solid rgba(255,255,255,0.3)',
+            borderRadius:8,padding:'4px 10px',
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+            letterSpacing:'0.06em',color:'#fff',cursor:'pointer',
+            WebkitTapHighlightColor:'transparent',
+          }}>DONE</button>
+        </div>
+      )}
+
       {/* Score page content */}
       <div data-score-container style={{position:'absolute',inset:0,display:'flex'}}>
         {/* Floating page arrows */}
@@ -2564,6 +2762,27 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               cursor: isInterleaved?'crosshair':'default'}}
             onContextMenu={e=>e.preventDefault()}
             draggable={false} />
+          {/* Annotation canvas */}
+          <canvas ref={el=>{
+            annotCanvasRef.current=el;
+            if(el){
+              const img=el.parentElement?.querySelector('img');
+              if(img&&img.clientWidth){el.width=img.clientWidth;el.height=img.clientHeight;}
+              drawAnnotations(el, currentPage);
+            }
+          }}
+            onPointerDown={handleAnnotPointerDown}
+            onPointerMove={handleAnnotPointerMove}
+            onPointerUp={handleAnnotPointerUp}
+            onPointerLeave={handleAnnotPointerUp}
+            style={{
+              position:'absolute',top:0,left:0,width:'100%',height:'100%',
+              pointerEvents: pencilMode ? 'auto' : 'none',
+              touchAction: pencilMode ? 'none' : 'auto',
+              cursor: pencilMode ? (eraserOn ? 'cell' : 'crosshair') : 'default',
+              zIndex: pencilMode ? 20 : 5,
+            }}
+          />
           {isInterleaved && interleavedSpots.filter(s=>s.page===currentPage).map(spot=>(
             <SpotBox key={spot.id} spot={spot} mode="placement"
               onRemove={onRemoveSpot}
@@ -2665,6 +2884,15 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 letterSpacing:'0.08em',cursor:'pointer',
                 WebkitTapHighlightColor:'transparent',
               }}>🎵 METRONOME</button>
+              <button onClick={()=>setPencilMode(p=>!p)} style={{
+                background: pencilMode ? 'rgba(230,120,50,0.18)' : 'rgba(230,120,50,0.08)',
+                border: `1px solid ${pencilMode ? 'rgba(230,120,50,0.35)' : 'rgba(230,120,50,0.18)'}`,
+                color: pencilMode ? '#d4722a' : '#c89060',
+                padding:'4px 10px',borderRadius:12,
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',
+                letterSpacing:'0.08em',cursor:'pointer',
+                WebkitTapHighlightColor:'transparent',
+              }}>{pencilMode ? '✏️ PENCIL ON' : '✏️ PENCIL'}</button>
               <button onClick={()=>setShowTempoTrackers(t=>!t)} style={{
                 background: showTempoTrackers ? 'rgba(46,170,87,0.18)' : 'rgba(46,170,87,0.08)',
                 border: `1px solid ${showTempoTrackers ? 'rgba(46,170,87,0.35)' : 'rgba(46,170,87,0.18)'}`,
