@@ -1667,6 +1667,22 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const timerRef = useRef(null);
   const [customMin, setCustomMin] = useState('');
 
+  // Floating metronome
+  const [showMetro, setShowMetro] = useState(false);
+  const [metroOn, setMetroOn] = useState(false);
+  const [metroBpm, setMetroBpm] = useState(80);
+  const [metroSubdiv, setMetroSubdiv] = useState(1);
+  const [metroExpanded, setMetroExpanded] = useState(true);
+  const [metroPos, setMetroPos] = useState({x:20, y:140});
+  const metroDragRef = useRef(null);
+  const placeMet = useRef(new Metro());
+
+  useEffect(()=>{
+    if(metroOn) placeMet.current.start(metroBpm); else placeMet.current.stop();
+  },[metroOn]);
+  useEffect(()=>{placeMet.current.setBpm(metroBpm);},[metroBpm]);
+  useEffect(()=>()=>placeMet.current.stop(),[]);
+
   useEffect(()=>{
     if(!timerRunning || timerLeft==null) return;
     if(timerLeft <= 0) {
@@ -2377,6 +2393,113 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         </div>
       )}
 
+      {/* Floating draggable metronome */}
+      {showMetro && (
+        <div
+          onTouchStart={e=>{
+            const t=e.touches[0];
+            metroDragRef.current={sx:t.clientX-metroPos.x, sy:t.clientY-metroPos.y, moved:false};
+          }}
+          onTouchMove={e=>{
+            if(!metroDragRef.current) return;
+            e.preventDefault();
+            const t=e.touches[0];
+            metroDragRef.current.moved=true;
+            setMetroPos({x:t.clientX-metroDragRef.current.sx, y:t.clientY-metroDragRef.current.sy});
+          }}
+          onTouchEnd={(e)=>{
+            if(metroDragRef.current && !metroDragRef.current.moved) {
+              if(e.target.tagName!=='BUTTON') setMetroExpanded(p=>!p);
+            }
+            metroDragRef.current=null;
+          }}
+          style={{
+            position:'absolute',left:metroPos.x,top:metroPos.y,zIndex:40,
+            background: metroOn
+              ? 'rgba(168,85,200,0.9)'
+              : 'rgba(150,120,170,0.85)',
+            backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
+            borderRadius: metroExpanded ? 16 : 24,
+            padding: metroExpanded ? '12px 14px' : '8px 14px',
+            boxShadow:'0 4px 20px rgba(0,0,0,0.2)',
+            cursor:'grab',touchAction:'none',userSelect:'none',WebkitUserSelect:'none',
+            display:'flex',flexDirection: metroExpanded?'column':'row',
+            alignItems:'center',gap: metroExpanded?8:8,
+            transition:'border-radius 0.2s, padding 0.2s',
+          }}>
+          {/* BPM display */}
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <button onClick={e=>{e.stopPropagation();setMetroOn(m=>!m);}} style={{
+              background: metroOn ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.15)',
+              border:'1px solid rgba(255,255,255,0.4)',
+              borderRadius:8,width:32,height:32,
+              color:'#fff',fontSize:'0.9rem',cursor:'pointer',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              WebkitTapHighlightColor:'transparent',
+            }}>{metroOn?'⏸':'▶'}</button>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",
+              fontSize: metroExpanded?'1.6rem':'1.2rem',
+              letterSpacing:'0.05em',color:'#fff',lineHeight:1}}>
+              ♩={metroBpm}
+            </div>
+          </div>
+          {metroExpanded && (<>
+            {/* BPM controls */}
+            <div style={{display:'flex',gap:4,alignItems:'center'}}>
+              <button onClick={e=>{e.stopPropagation();setMetroBpm(b=>Math.max(20,b-10));}} style={{
+                background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.3)',
+                borderRadius:6,padding:'3px 8px',color:'#fff',cursor:'pointer',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                WebkitTapHighlightColor:'transparent',
+              }}>−10</button>
+              <button onClick={e=>{e.stopPropagation();setMetroBpm(b=>Math.max(20,b-1));}} style={{
+                background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.3)',
+                borderRadius:6,padding:'3px 10px',color:'#fff',cursor:'pointer',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
+                WebkitTapHighlightColor:'transparent',
+              }}>−</button>
+              <button onClick={e=>{e.stopPropagation();setMetroBpm(b=>Math.min(300,b+1));}} style={{
+                background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.3)',
+                borderRadius:6,padding:'3px 10px',color:'#fff',cursor:'pointer',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',
+                WebkitTapHighlightColor:'transparent',
+              }}>+</button>
+              <button onClick={e=>{e.stopPropagation();setMetroBpm(b=>Math.min(300,b+10));}} style={{
+                background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.3)',
+                borderRadius:6,padding:'3px 8px',color:'#fff',cursor:'pointer',
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                WebkitTapHighlightColor:'transparent',
+              }}>+10</button>
+            </div>
+            {/* Subdivisions */}
+            <div style={{display:'flex',gap:4}}>
+              {[{v:1,label:'♩'},{v:2,label:'♪♪'},{v:3,label:'♪³'}].map(({v,label})=>(
+                <button key={v} onClick={e=>{
+                  e.stopPropagation();
+                  setMetroSubdiv(v);
+                  placeMet.current.setSubdiv(v);
+                  if(metroOn) placeMet.current.start(metroBpm);
+                }} style={{
+                  background: metroSubdiv===v ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)',
+                  color: '#fff',
+                  border: `1px solid ${metroSubdiv===v ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.25)'}`,
+                  padding:'4px 10px',fontFamily:"'Bebas Neue',sans-serif",
+                  fontSize:'0.75rem',cursor:'pointer',borderRadius:6,
+                  WebkitTapHighlightColor:'transparent',
+                }}>{label}</button>
+              ))}
+            </div>
+            {/* Close */}
+            <button onClick={e=>{e.stopPropagation();setMetroOn(false);setShowMetro(false);}} style={{
+              background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.3)',
+              borderRadius:6,padding:'4px 12px',color:'#fff',cursor:'pointer',
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',letterSpacing:'0.06em',
+              WebkitTapHighlightColor:'transparent',
+            }}>CLOSE</button>
+          </>)}
+        </div>
+      )}
+
       {/* Timer done overlay */}
       {timerLeft != null && timerLeft <= 0 && (
         <div style={{
@@ -2533,6 +2656,15 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 letterSpacing:'0.08em',cursor:'pointer',
                 WebkitTapHighlightColor:'transparent',
               }}>⏱ TIMER</button>
+              <button onClick={()=>{setShowMetro(true);setMetroExpanded(true);}} style={{
+                background: metroOn ? 'rgba(180,80,200,0.18)' : 'rgba(180,80,200,0.08)',
+                border: `1px solid ${metroOn ? 'rgba(180,80,200,0.35)' : 'rgba(180,80,200,0.18)'}`,
+                color: metroOn ? '#a855c8' : '#b888cc',
+                padding:'4px 10px',borderRadius:12,
+                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.65rem',
+                letterSpacing:'0.08em',cursor:'pointer',
+                WebkitTapHighlightColor:'transparent',
+              }}>🎵 METRONOME</button>
               <button onClick={()=>setShowTempoTrackers(t=>!t)} style={{
                 background: showTempoTrackers ? 'rgba(46,170,87,0.18)' : 'rgba(46,170,87,0.08)',
                 border: `1px solid ${showTempoTrackers ? 'rgba(46,170,87,0.35)' : 'rgba(46,170,87,0.18)'}`,
@@ -4552,7 +4684,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
             color:'rgba(0,0,0,0.5)',fontFamily:"'Bebas Neue',sans-serif",
             fontSize:'0.85rem',letterSpacing:'0.08em',cursor:'pointer',
             WebkitTapHighlightColor:'transparent',
-          }}>{accMode==='sharp'?'SHARPS':'FLATS'}</button>
+          }}>{accMode==='sharp'?'USE FLATS':'USE SHARPS'}</button>
           <button onClick={()=>{setSelNotes([]);setInsertAt(-1);setRespellChip(null);setGenerated(false);}} style={{
             padding:'4px 10px',borderRadius:2,background:'none',
             border:'1px solid rgba(0,0,0,0.15)',
@@ -5201,6 +5333,8 @@ function SpotLogScreen({ profile, piece, tapPos, onBack, onPracticeAgain }) {
   const [logs, setLogs] = useState([]);
   const [spots, setSpots] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editingLog, setEditingLog] = useState(null);
+  const [deletingLog, setDeletingLog] = useState(null);
 
   useEffect(()=>{
     (async ()=>{
@@ -5229,7 +5363,6 @@ function SpotLogScreen({ profile, piece, tapPos, onBack, onPracticeAgain }) {
   };
   const stratColor = s => s==='icu'?C.accent:s==='mur'?C.gold:s==='scu'?'#2eaa57':'#999';
 
-  // Group: Day → Spot → entries
   const byDate = {};
   logs.forEach(l => {
     const d = l.session_date || 'Unknown';
@@ -5237,10 +5370,121 @@ function SpotLogScreen({ profile, piece, tapPos, onBack, onPracticeAgain }) {
     byDate[d].push(l);
   });
 
+  const renderLog = (l, sp) => {
+    const pct = (l.perf_tempo && l.max_tempo)
+      ? Math.min(100, Math.round((l.max_tempo / l.perf_tempo) * 100))
+      : null;
+    const isEditing = editingLog?.id === l.id;
+    return (
+      <div key={l.id} style={{padding:'6px 12px',borderBottom:`1px solid #f0f0f0`,
+        display:'flex',alignItems:'flex-start',gap:10}}>
+        <div style={{width:8,height:8,borderRadius:'50%',flexShrink:0,
+          background:stratColor(l.strategy),marginTop:5}}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.95rem',
+            color:'#999',letterSpacing:'0.02em'}}>
+            {stratName(l.strategy)}
+            {l.start_tempo && l.max_tempo ? ` · ♩ ${l.start_tempo} → ${l.max_tempo}` : ''}
+            {l.perf_tempo ? ` (goal: ${l.perf_tempo})` : ''}
+            {l.reps_clean ? ` · ${l.reps_clean} clean` : ''}
+          </div>
+          {isEditing ? (
+            <div style={{marginTop:4}}>
+              <textarea value={editingLog.notes} onChange={e=>setEditingLog({...editingLog, notes:e.target.value})}
+                rows={2} style={{
+                  width:'100%',padding:'8px 10px',borderRadius:8,
+                  border:'1.5px solid #ddd',fontFamily:"'Cormorant Garamond',serif",
+                  fontSize:'1.05rem',color:'#333',outline:'none',boxSizing:'border-box',
+                  resize:'vertical',lineHeight:1.4,
+                }}
+                onFocus={e=>{e.target.style.borderColor=C.accent}}
+                onBlur={e=>{e.target.style.borderColor='#ddd'}}
+              />
+              <div style={{display:'flex',gap:6,marginTop:4}}>
+                <button onClick={async ()=>{
+                  try {
+                    await sbPatch(`/rest/v1/practice_logs?id=eq.${l.id}`, {notes: editingLog.notes||null});
+                    setLogs(prev=>prev.map(lg=>lg.id===l.id?{...lg,notes:editingLog.notes}:lg));
+                  } catch(e){}
+                  setEditingLog(null);
+                }} style={{
+                  padding:'4px 12px',borderRadius:6,background:C.accent,border:'none',
+                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                  letterSpacing:'0.06em',color:'#fff',cursor:'pointer',
+                }}>SAVE</button>
+                <button onClick={()=>setEditingLog(null)} style={{
+                  padding:'4px 12px',borderRadius:6,background:'#f0f0f0',border:'none',
+                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+                  letterSpacing:'0.06em',color:'#666',cursor:'pointer',
+                }}>CANCEL</button>
+              </div>
+            </div>
+          ) : (
+            l.notes && (
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                fontSize:'1.05rem',color:'#555',marginTop:3,lineHeight:1.4}}>
+                {l.notes}
+              </div>
+            )
+          )}
+        </div>
+        {pct !== null && l.strategy === 'scu' && (
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',
+            color:'#2eaa57',flexShrink:0}}>{pct}%</div>
+        )}
+        {!isEditing && (
+          <div style={{display:'flex',gap:2,flexShrink:0,marginTop:2}}>
+            <button onClick={()=>setEditingLog({id:l.id, notes:l.notes||''})} style={{
+              background:'none',border:'none',color:'#bbb',cursor:'pointer',
+              fontSize:'1.3rem',padding:'4px 8px',WebkitTapHighlightColor:'transparent',
+            }}>✎</button>
+            <button onClick={()=>setDeletingLog(l.id)} style={{
+              background:'none',border:'none',color:'#dbb',cursor:'pointer',
+              fontSize:'1.3rem',padding:'4px 8px',WebkitTapHighlightColor:'transparent',
+            }}>✕</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
       <TopBar left={<BackBtn onClick={onBack}/>} center={piece?.title ? `JOURNAL — ${piece.title}` : 'PRACTICE JOURNAL'} right={null}/>
       <div style={{flex:'1 1 0',overflowY:'auto',padding:16,WebkitOverflowScrolling:'touch'}}>
+
+        {/* Delete confirmation */}
+        {deletingLog && (
+          <>
+            <div onClick={()=>setDeletingLog(null)} style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,0.25)'}}/>
+            <div style={{position:'fixed',left:'50%',top:'50%',transform:'translate(-50%,-50%)',
+              zIndex:501,background:'#fff',borderRadius:14,padding:'20px 24px',
+              width:'min(320px,85vw)',boxShadow:'0 8px 32px rgba(0,0,0,0.15)',
+              textAlign:'center'}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
+                letterSpacing:'0.1em',color:'#1a1a1a',marginBottom:8}}>DELETE THIS ENTRY?</div>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+                fontSize:'1rem',color:'#888',marginBottom:16}}>This cannot be undone.</div>
+              <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+                <button onClick={()=>setDeletingLog(null)} style={{
+                  padding:'10px 20px',borderRadius:10,background:'#f0f0f0',border:'none',
+                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',color:'#666',cursor:'pointer',
+                }}>CANCEL</button>
+                <button onClick={async ()=>{
+                  try {
+                    await sbDelete(`/rest/v1/practice_logs?id=eq.${deletingLog}`);
+                    setLogs(prev=>prev.filter(l=>l.id!==deletingLog));
+                  } catch(e){}
+                  setDeletingLog(null);
+                }} style={{
+                  padding:'10px 20px',borderRadius:10,background:'#e57373',border:'none',
+                  fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.9rem',color:'#fff',cursor:'pointer',
+                }}>DELETE</button>
+              </div>
+            </div>
+          </>
+        )}
+
         {loading && <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'1rem',color:C.muted,textAlign:'center',padding:40}}>Loading...</div>}
         {!loading && logs.length===0 && (
           <div style={{textAlign:'center',padding:60,color:C.muted,fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',fontSize:'1.2rem'}}>
@@ -5248,101 +5492,39 @@ function SpotLogScreen({ profile, piece, tapPos, onBack, onPracticeAgain }) {
           </div>
         )}
         {!loading && Object.entries(byDate).map(([date, dayLogs]) => {
-          // Group by spot within this day
           const bySpot = {};
-          const unlinked = [];
           dayLogs.forEach(l => {
-            if(l.spot_id) {
-              if(!bySpot[l.spot_id]) bySpot[l.spot_id]=[];
-              bySpot[l.spot_id].push(l);
-            } else {
-              unlinked.push(l);
-            }
+            const sid = l.spot_id || 'none';
+            if(!bySpot[sid]) bySpot[sid]=[];
+            bySpot[sid].push(l);
           });
 
           return (
             <div key={date} style={{marginBottom:20}}>
               {/* Date header */}
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.1rem',
-                letterSpacing:'0.15em',color:'#1a1a1a',padding:'14px 4px 8px',
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.2rem',
+                letterSpacing:'0.18em',color:'#1a1a1a',padding:'14px 4px 6px',
                 borderBottom:`2px solid ${C.bord}`,display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
                 <span>{new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</span>
-                <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.85rem',
+                <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.95rem',
                   letterSpacing:0,color:C.muted}}>{relDate(date)}</span>
               </div>
 
-              {/* Spots for this day */}
               {Object.entries(bySpot).map(([sid, spotLogs]) => {
                 const sp = spots.find(s=>s.id===sid);
                 return (
-                  <div key={sid} style={{marginTop:8,marginLeft:4,borderLeft:`3px solid ${C.bord}`,paddingLeft:12}}>
-                    {/* Spot label */}
-                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.05rem',
-                      letterSpacing:'0.08em',color:'#333',padding:'8px 0 4px'}}>
-                      {sp?.label || 'Unlabeled spot'}
-                      {sp?.perf_tempo ? <span style={{color:C.muted,fontWeight:400,fontSize:'0.85rem'}}> · goal ♩ = {sp.perf_tempo}</span> : ''}
-                    </div>
-
-                    {/* Sessions at this spot */}
-                    {spotLogs.map(l => {
-                      const pct = (l.perf_tempo && l.max_tempo)
-                        ? Math.min(100, Math.round((l.max_tempo / l.perf_tempo) * 100))
-                        : null;
-                      return (
-                        <div key={l.id} style={{padding:'8px 0',borderBottom:`1px solid #f0f0f0`,
-                          display:'flex',alignItems:'center',gap:10}}>
-                          <div style={{width:10,height:10,borderRadius:'50%',flexShrink:0,
-                            background:stratColor(l.strategy)}}/>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',
-                              letterSpacing:'0.06em',color:'#1a1a1a'}}>
-                              {stratName(l.strategy)}
-                            </div>
-                            <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.9rem',
-                              color:'#666',marginTop:2}}>
-                              {l.start_tempo && l.max_tempo ? `♩ ${l.start_tempo} → ${l.max_tempo}` : ''}
-                              {l.perf_tempo ? ` (goal: ${l.perf_tempo})` : ''}
-                              {l.reps_clean ? ` · ${l.reps_clean} clean` : ''}
-                              {l.notes ? ` · ${l.notes}` : ''}
-                            </div>
-                          </div>
-                          {pct !== null && (
-                            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.3rem',
-                              color:pct>=100?'#2eaa57':C.accent,flexShrink:0}}>{pct}%</div>
-                          )}
-                          {sp && (
-                            <button onClick={()=>onPracticeAgain({strategy:l.strategy, spot:sp, piece})}
-                              style={{padding:'6px 12px',background:stratColor(l.strategy),
-                                border:'none',borderRadius:8,color:'white',
-                                fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
-                                letterSpacing:'0.06em',cursor:'pointer',flexShrink:0,
-                                WebkitTapHighlightColor:'transparent',
-                              }}>PRACTICE</button>
-                          )}
-                        </div>
-                      );
-                    })}
+                  <div key={sid} style={{marginLeft:8,borderLeft:`3px solid ${C.bord}`,marginTop:8}}>
+                    {sp?.label && (
+                      <div style={{fontFamily:"'Bebas Neue',sans-serif",
+                        fontSize:'1.05rem',letterSpacing:'0.06em',color:'#555',
+                        padding:'6px 12px 2px'}}>
+                        {sp.label}
+                      </div>
+                    )}
+                    {spotLogs.map(l => renderLog(l, sp))}
                   </div>
                 );
               })}
-
-              {/* Unlinked sessions */}
-              {unlinked.map(l => (
-                <div key={l.id} style={{padding:'8px 4px',marginTop:4,borderBottom:`1px solid #f0f0f0`,
-                  display:'flex',alignItems:'center',gap:10}}>
-                  <div style={{width:10,height:10,borderRadius:'50%',flexShrink:0,
-                    background:stratColor(l.strategy)}}/>
-                  <div style={{flex:1}}>
-                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1rem',color:'#333'}}>
-                      {stratName(l.strategy)}
-                    </div>
-                    <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.85rem',color:'#666',marginTop:2}}>
-                      {l.start_tempo && l.max_tempo ? `♩ ${l.start_tempo} → ${l.max_tempo}` : ''}
-                      {l.notes ? ` · ${l.notes}` : ''}
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
           );
         })}
