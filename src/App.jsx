@@ -5189,7 +5189,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
       curY += 30;
       pdf.setFont('helvetica','normal');
       pdf.setFontSize(9);
-      pdf.text(`${selNotes.length} notes \u00b7 ${g2s(activeGroup)} \u00b7 Key: ${murKey} \u00b7 ${new Date().toLocaleDateString()}`, margin, curY);
+      pdf.text(`${selNotes.length} notes \u00b7 ${g2s(activeGroup)} \u00b7 Key: ${key} \u00b7 ${new Date().toLocaleDateString()}`, margin, curY);
       curY += 20;
 
       for(let i=0; i<exercises.length; i++) {
@@ -5198,7 +5198,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
           tmpDiv.style.cssText='position:fixed;left:0;top:0;width:680px;background:white;z-index:9999;padding:8px 12px;';
           document.body.appendChild(tmpDiv);
 
-          const abc = buildAbcString(exercises[i].pat, selNotes, clef, murKey);
+          const abc = buildAbcString(exercises[i].pat, selNotes, clef, key);
           window.ABCJS.renderAbc(tmpDiv, abc, {
             scale:1.3, staffwidth: Math.round(usableW * 1.2),
             paddingright:10,paddingleft:10,paddingbottom:4,paddingtop:4,

@@ -1,4 +1,4 @@
-const CACHE = 'icu-v165';
+const CACHE = 'icu-v166';
 const SHELL = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
