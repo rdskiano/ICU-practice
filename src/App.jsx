@@ -969,6 +969,8 @@ export default function App() {
           spots={interleavedSpots}
           rotationMode={interleavedMode}
           rotationValue={interleavedValue}
+          profile={profile}
+          piece={piece}
           onBack={()=>{ setInterleavedSpots([]); setSessionMode('massed'); setScreen('score'); }}
           onDone={()=>{ setStrategyNote({strategy:'interleaved'}); setNoteText(''); setInterleavedSpots([]); setSessionMode('massed'); setScreen('score'); }}
         />
@@ -3569,14 +3571,14 @@ function SpotBox({ spot, mode, onRemove, isCurrent, isSelected, onSelect, target
 /* ═══════════════════════════════════════════════════════════════════════
    INTERLEAVED — SESSION SCREEN
 ═══════════════════════════════════════════════════════════════════════ */
-function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMode, rotationValue, onBack, onDone }) {
+function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMode, rotationValue, profile, piece, onBack, onDone }) {
   const [spots, setSpots]                 = useState(()=>initialSpots.map(s=>({...s,checks:0,visited:false})));
   const [currentSpotId, setCurrentSpotId] = useState(null);
   const [currentPage, setCurrentPage]     = useState(0);
   const [flash, setFlash]                 = useState(null);
   const [done, setDone]                   = useState(false);
   const [showNextSpot, setShowNextSpot]   = useState(false);
-  const [spotTimer, setSpotTimer]         = useState(null); // seconds remaining for timed mode
+  const [spotTimer, setSpotTimer]         = useState(null);
   const spotTimerRef = useRef(null);
   const targetChecks = rotationMode==='consistency' ? (rotationValue||5) : 999;
   const isTimed = rotationMode==='timed';
@@ -3589,6 +3591,102 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
   const [metroOn,  setMetroOn]  = useState(false);
   const [metroBpm, setMetroBpm] = useState(80);
   const [subdiv, setSubdiv] = useState(1);
+
+  // Recorder
+  const [showRecorder, setShowRecorder] = useState(false);
+  const [ilRecording, setIlRecording] = useState(false);
+  const [ilRecordings, setIlRecordings] = useState([]);
+  const [ilPlayingIdx, setIlPlayingIdx] = useState(null);
+  const [ilRecDuration, setIlRecDuration] = useState(0);
+  const ilRecorderRef = useRef(null);
+  const ilRecChunks = useRef([]);
+  const ilRecTimer = useRef(null);
+  const ilRecStart = useRef(0);
+  const ilAudioRef = useRef(null);
+
+  const getRecMime = () => {
+    if(typeof MediaRecorder==='undefined') return null;
+    for(const t of ['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg'])
+      try { if(MediaRecorder.isTypeSupported(t)) return t; } catch(e){}
+    return '';
+  };
+  const ilFmtDur = s => `${Math.floor(s/60)}:${(s%60)<10?'0':''}${s%60}`;
+
+  const ilStartRec = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      const mime = getRecMime();
+      const mr = new MediaRecorder(stream, mime?{mimeType:mime}:{});
+      ilRecChunks.current = [];
+      mr.ondataavailable = e => { if(e.data.size>0) ilRecChunks.current.push(e.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach(t=>t.stop());
+        const usedMime = mr.mimeType || mime || 'audio/webm';
+        const blob = new Blob(ilRecChunks.current, {type:usedMime});
+        const url = URL.createObjectURL(blob);
+        const dur = Math.round((Date.now()-ilRecStart.current)/1000);
+        const spotId = currentSpotIdRef.current;
+        const spot = spots.find(s=>s.id===spotId);
+        setIlRecordings(prev=>[{url, blob, date:new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}), duration:dur, spotId, spotLabel:spot?.label||`Spot ${spotId}`}, ...prev]);
+        setIlRecDuration(0);
+      };
+      ilRecorderRef.current = mr;
+      mr.start(250);
+      ilRecStart.current = Date.now();
+      setIlRecording(true);
+      setIlRecDuration(0);
+      ilRecTimer.current = setInterval(()=>setIlRecDuration(d=>d+1), 1000);
+    } catch(e) { console.error('mic denied', e); }
+  };
+
+  const ilStopRec = () => {
+    if(ilRecorderRef.current?.state==='recording') ilRecorderRef.current.stop();
+    setIlRecording(false);
+    clearInterval(ilRecTimer.current);
+  };
+
+  const ilPlayRec = (idx) => {
+    if(ilAudioRef.current) { ilAudioRef.current.pause(); ilAudioRef.current=null; }
+    if(ilPlayingIdx===idx) { setIlPlayingIdx(null); return; }
+    try {
+      const a = new Audio(); a.src = ilRecordings[idx].url;
+      a.onended=()=>setIlPlayingIdx(null); a.onerror=()=>setIlPlayingIdx(null);
+      a.play().catch(()=>setIlPlayingIdx(null));
+      ilAudioRef.current = a; setIlPlayingIdx(idx);
+    } catch(e) { setIlPlayingIdx(null); }
+  };
+
+  const ilDeleteRec = (idx) => {
+    if(ilPlayingIdx===idx) { ilAudioRef.current?.pause(); setIlPlayingIdx(null); }
+    URL.revokeObjectURL(ilRecordings[idx].url);
+    setIlRecordings(prev=>prev.filter((_,i)=>i!==idx));
+  };
+
+  const ilSaveRec = async (idx) => {
+    const rec = ilRecordings[idx];
+    if(rec.saved) return;
+    try {
+      const reader = new FileReader();
+      const b64 = await new Promise((res,rej)=>{
+        reader.onload=()=>res(reader.result); reader.onerror=rej;
+        reader.readAsDataURL(rec.blob);
+      });
+      const audioKey = `pfn_audio_${Date.now()}`;
+      localStorage.setItem(audioKey, b64);
+      const prof = profile || getProfile();
+      if(prof.email) {
+        await sbPost('/rest/v1/practice_logs', {
+          user_email: prof.email,
+          piece_id: piece?.id||null,
+          spot_id: rec.spotId||null,
+          strategy: 'recording',
+          session_date: localDate(),
+          notes: `🎙 Recording (${ilFmtDur(rec.duration)}) — ${rec.spotLabel} [audio:${audioKey}]`,
+        });
+      }
+      setIlRecordings(prev=>prev.map((r,i)=>i===idx?{...r,saved:true}:r));
+    } catch(e) { console.error('save failed', e); }
+  };
   useEffect(()=>{ currentSpotIdRef.current = currentSpotId; },[currentSpotId]);
   useEffect(()=>{ currentPageRef.current   = currentPage;   },[currentPage]);
   // When spot changes: if it has a locked BPM, auto-load it; otherwise keep current
@@ -3725,8 +3823,19 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
           fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
           letterSpacing:'0.1em'}}>← EXIT</button>}
         center={currentSpotId ? `SPOT ${currentSpotId} OF ${spots.length}` : 'INTERLEAVED'}
-        right={<span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',color:C.muted}}>
-          {completedCount}/{spots.length} done</span>}
+        right={<div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <button onClick={()=>setShowRecorder(true)} style={{
+            background: ilRecording ? 'rgba(220,50,50,0.18)' : 'rgba(220,50,50,0.08)',
+            border: `1px solid ${ilRecording ? 'rgba(220,50,50,0.35)' : 'rgba(220,50,50,0.18)'}`,
+            color: ilRecording ? '#dc3232' : '#c87070',
+            padding:'3px 8px',borderRadius:10,
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',
+            letterSpacing:'0.06em',cursor:'pointer',
+            WebkitTapHighlightColor:'transparent',
+          }}>{ilRecording ? '⏺ REC' : '🎙'}</button>
+          <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',color:C.muted}}>
+          {completedCount}/{spots.length} done</span>
+        </div>}
       />
 
       {/* Verdict + metro bar — compact single row */}
@@ -3836,6 +3945,76 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
 
       {/* Score — full remaining height with floating arrows */}
       <div style={{flex:'1 1 0',minHeight:0,background:'#e8e5e0',display:'flex',position:'relative'}}>
+
+        {/* Floating recorder */}
+        {showRecorder && (
+          <div style={{
+            position:'absolute',top:8,right:8,zIndex:30,
+            background:'rgba(50,50,50,0.95)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
+            borderRadius:16,padding:'12px 14px',boxShadow:'0 4px 24px rgba(0,0,0,0.25)',
+            width:220,display:'flex',flexDirection:'column',gap:8,
+          }}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.8rem',letterSpacing:'0.1em',color:'#fff'}}>
+                🎙 RECORDER {currentSpotId ? `· Spot ${currentSpotId}` : ''}
+              </div>
+              <button onClick={()=>{if(ilRecording)ilStopRec();setShowRecorder(false);}} style={{
+                background:'none',border:'none',color:'#999',fontSize:'1rem',cursor:'pointer',padding:'0 2px',
+              }}>✕</button>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:10,justifyContent:'center'}}>
+              {!ilRecording ? (
+                <button onClick={ilStartRec} style={{
+                  width:48,height:48,borderRadius:'50%',background:'#dc3232',
+                  border:'3px solid rgba(255,255,255,0.3)',cursor:'pointer',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  boxShadow:'0 0 0 4px rgba(220,50,50,0.3)',
+                }}><div style={{width:18,height:18,borderRadius:'50%',background:'#fff'}}/></button>
+              ) : (
+                <button onClick={ilStopRec} style={{
+                  width:48,height:48,borderRadius:'50%',background:'#dc3232',
+                  border:'3px solid rgba(255,255,255,0.3)',cursor:'pointer',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  boxShadow:'0 0 0 4px rgba(220,50,50,0.3)',
+                }}><div style={{width:16,height:16,borderRadius:3,background:'#fff'}}/></button>
+              )}
+              {ilRecording && (
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.3rem',color:'#dc3232',minWidth:50}}>
+                  {ilFmtDur(ilRecDuration)}
+                </div>
+              )}
+            </div>
+            {ilRecordings.length > 0 && (
+              <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:140,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+                {ilRecordings.map((r,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:6,
+                    padding:'5px 6px',background:'rgba(255,255,255,0.08)',borderRadius:6}}>
+                    <button onClick={()=>ilPlayRec(i)} style={{
+                      width:26,height:26,borderRadius:'50%',
+                      background:ilPlayingIdx===i?'#dc3232':'rgba(255,255,255,0.15)',
+                      border:'1px solid rgba(255,255,255,0.3)',color:'#fff',fontSize:'0.7rem',
+                      cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+                    }}>{ilPlayingIdx===i?'⏸':'▶'}</button>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',color:'#fff',letterSpacing:'0.04em'}}>
+                        {r.spotLabel} · {r.date} · {ilFmtDur(r.duration)}
+                      </div>
+                    </div>
+                    <button onClick={()=>ilDeleteRec(i)} style={{
+                      background:'none',border:'none',color:'#888',fontSize:'0.8rem',cursor:'pointer',padding:'2px',
+                    }}>✕</button>
+                    <button onClick={()=>ilSaveRec(i)} style={{
+                      background:r.saved?'rgba(46,170,87,0.3)':'rgba(255,255,255,0.15)',
+                      border:'1px solid rgba(255,255,255,0.3)',borderRadius:5,padding:'2px 6px',
+                      fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.55rem',color:'#fff',
+                      cursor:r.saved?'default':'pointer',
+                    }}>{r.saved?'✓':'SAVE'}</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {/* Floating page arrows */}
         {totalPages>1 && currentPage>0 && (
           <button onClick={()=>setCurrentPage(p=>p-1)} style={{
