@@ -1792,16 +1792,17 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   },[currentPage, drawAnnotations]);
 
   const handleAnnotPointerDown = (e) => {
-    if(!pencilMode) return;
-    // Only respond to pen or touch when in pencil mode
+    const isPen = e.pointerType === 'pen';
+    // Allow drawing with pen anytime, or any input when pencilMode is on
+    if(!isPen && !pencilMode) return;
     const canvas = annotCanvasRef.current;
     if(!canvas) return;
+    e.preventDefault(); // prevent scroll/zoom for drawing
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
 
-    if(eraserOn) {
-      // Erase strokes near this point
+    if(eraserOn && pencilMode) {
       setAnnotations(prev => {
         const strokes = prev[currentPage] || [];
         const filtered = strokes.filter(s => {
@@ -1817,7 +1818,11 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   };
 
   const handleAnnotPointerMove = (e) => {
-    if(!annotDrawing.current || !pencilMode || eraserOn) return;
+    if(!annotDrawing.current) return;
+    const isPen = e.pointerType === 'pen';
+    if(!isPen && !pencilMode) return;
+    if(eraserOn && pencilMode) return;
+    e.preventDefault();
     const canvas = annotCanvasRef.current;
     if(!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -1825,7 +1830,6 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
     const y = (e.clientY - rect.top) / rect.height;
     annotCurrent.current.push({x, y});
 
-    // Live preview
     const ctx = canvas.getContext('2d');
     const pts = annotCurrent.current;
     if(pts.length >= 2) {
@@ -1851,6 +1855,69 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
       }));
     }
     annotCurrent.current = [];
+  };
+
+  // Export annotated PDF
+  const [exportingScore, setExportingScore] = useState(false);
+
+  const exportAnnotatedPdf = async () => {
+    setExportingScore(true);
+    try {
+      if(!window.jspdf) {
+        await new Promise((res,rej)=>{
+          const s=document.createElement('script');
+          s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js';
+          s.onload=res; s.onerror=rej;
+          document.head.appendChild(s);
+        });
+      }
+      const { jsPDF } = window.jspdf;
+      const firstImg = await new Promise((res,rej)=>{
+        const im=new Image(); im.crossOrigin='anonymous';
+        im.onload=()=>res(im); im.onerror=rej; im.src=pageImages[0];
+      });
+      const imgAspect = firstImg.naturalWidth / firstImg.naturalHeight;
+      const pdf = new jsPDF({orientation: imgAspect>1?'landscape':'portrait', unit:'pt', format:'letter'});
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+
+      for(let p=0; p<pageImages.length; p++) {
+        if(p > 0) pdf.addPage();
+        const img = await new Promise((res,rej)=>{
+          const im=new Image(); im.crossOrigin='anonymous';
+          im.onload=()=>res(im); im.onerror=rej; im.src=pageImages[p];
+        });
+        const canvas = document.createElement('canvas');
+        const scale = 2;
+        canvas.width = img.naturalWidth * scale;
+        canvas.height = img.naturalHeight * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        // Overlay annotations
+        (annotations[p]||[]).forEach(s=>{
+          if(s.points.length<2) return;
+          ctx.beginPath();
+          ctx.strokeStyle=s.color; ctx.lineWidth=s.width*scale;
+          ctx.lineCap='round'; ctx.lineJoin='round';
+          ctx.moveTo(s.points[0].x*canvas.width, s.points[0].y*canvas.height);
+          for(let j=1;j<s.points.length;j++)
+            ctx.lineTo(s.points[j].x*canvas.width, s.points[j].y*canvas.height);
+          ctx.stroke();
+        });
+        const imgData = canvas.toDataURL('image/jpeg', 0.92);
+        const fitH = pageW / (img.naturalWidth / img.naturalHeight);
+        const finalW = fitH>pageH ? pageH*(img.naturalWidth/img.naturalHeight) : pageW;
+        const finalH = fitH>pageH ? pageH : fitH;
+        pdf.addImage(imgData, 'JPEG', (pageW-finalW)/2, (pageH-finalH)/2, finalW, finalH);
+      }
+      pdf.save(`${(piece?.title||'score').replace(/[^a-z0-9]/gi,'_')}_annotated.pdf`);
+    } catch(e) {
+      console.error('Annotated PDF export failed', e);
+      alert('Export failed: '+(e.message||'Unknown error'));
+    }
+    setExportingScore(false);
   };
 
   // Audio recorder
@@ -3068,6 +3135,16 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             WebkitTapHighlightColor:'transparent',
           }}>CLEAR</button>
 
+          {/* Export annotated PDF */}
+          <button onClick={exportAnnotatedPdf} disabled={exportingScore} style={{
+            background: exportingScore ? 'rgba(74,120,255,0.4)' : 'rgba(74,120,255,0.25)',
+            border:'1px solid rgba(74,120,255,0.5)',
+            borderRadius:8,padding:'4px 10px',
+            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',
+            letterSpacing:'0.06em',color:'#fff',cursor: exportingScore?'wait':'pointer',
+            WebkitTapHighlightColor:'transparent',
+          }}>{exportingScore?'...':'📄 EXPORT'}</button>
+
           {/* Close */}
           <button onClick={()=>setPencilMode(false)} style={{
             background:'transparent',
@@ -3099,7 +3176,11 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             WebkitTapHighlightColor:'transparent',
           }}>›</button>
         )}
-        <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}>
+        <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}
+          onPointerDown={handleAnnotPointerDown}
+          onPointerMove={handleAnnotPointerMove}
+          onPointerUp={handleAnnotPointerUp}
+          onPointerLeave={handleAnnotPointerUp}>
           <img data-page={currentPage} src={pageImages[currentPage]}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -3110,7 +3191,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               cursor: isInterleaved?'crosshair':'default'}}
             onContextMenu={e=>e.preventDefault()}
             draggable={false} />
-          {/* Annotation canvas */}
+          {/* Annotation canvas — display only, pointer events off */}
           <canvas ref={el=>{
             annotCanvasRef.current=el;
             if(el){
@@ -3119,16 +3200,10 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
               drawAnnotations(el, currentPage);
             }
           }}
-            onPointerDown={handleAnnotPointerDown}
-            onPointerMove={handleAnnotPointerMove}
-            onPointerUp={handleAnnotPointerUp}
-            onPointerLeave={handleAnnotPointerUp}
             style={{
               position:'absolute',top:0,left:0,width:'100%',height:'100%',
-              pointerEvents: pencilMode ? 'auto' : 'none',
-              touchAction: pencilMode ? 'none' : 'auto',
-              cursor: pencilMode ? (eraserOn ? 'cell' : 'crosshair') : 'default',
-              zIndex: pencilMode ? 20 : 5,
+              pointerEvents:'none',
+              zIndex:5,
             }}
           />
           {isInterleaved && interleavedSpots.filter(s=>s.page===currentPage).map(spot=>(
@@ -5075,66 +5150,97 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
 
       // Render each exercise SVG to canvas then to PDF
       for(let i=0; i<exercises.length; i++) {
-        const svgEl = document.querySelector('#mur-ex-'+i+' svg') ||
-                      document.querySelector('[id^="ex-phone"] svg');
-        if(!svgEl) continue;
-
-        // Re-render to a temporary div for clean capture
-        const tmpDiv = document.createElement('div');
-        tmpDiv.style.cssText='position:absolute;left:-9999px;top:0;background:white;';
-        document.body.appendChild(tmpDiv);
-        const abc = buildAbcString(exercises[i].pat, selNotes, clef, murKey);
         try {
-          // Use wrap to ensure breaks only at barlines, 4 measures per line
-          window.ABCJS.renderAbc(tmpDiv, abc, {
-            scale:1.3,
-            staffwidth: Math.round(usableW * 1.25),
-            paddingright:10,paddingleft:10,paddingbottom:4,paddingtop:4,
-            add_classes:true,
-            wrap:{minSpacing:1.5, maxSpacing:2.6, preferredMeasuresPerLine:4},
+          // Use the already-rendered on-screen SVG if available, otherwise render fresh
+          let svg = document.querySelector('#mur-ex-'+i+' svg');
+          let tmpDiv = null;
+
+          if(!svg) {
+            tmpDiv = document.createElement('div');
+            tmpDiv.style.cssText='position:fixed;left:0;top:0;width:700px;background:white;opacity:0;pointer-events:none;z-index:-1;';
+            document.body.appendChild(tmpDiv);
+            const abc = buildAbcString(exercises[i].pat, selNotes, clef, murKey);
+            window.ABCJS.renderAbc(tmpDiv, abc, {
+              scale:1.3, staffwidth: Math.round(usableW * 1.25),
+              paddingright:10,paddingleft:10,paddingbottom:4,paddingtop:4,
+              add_classes:true,
+              wrap:{minSpacing:1.5, maxSpacing:2.6, preferredMeasuresPerLine:4},
+            });
+            svg = tmpDiv.querySelector('svg');
+          }
+
+          if(!svg) { if(tmpDiv) document.body.removeChild(tmpDiv); continue; }
+
+          // Clone the SVG so we don't modify the on-screen version
+          const clone = svg.cloneNode(true);
+          clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
+          clone.querySelectorAll('path,rect,ellipse,line,polygon,polyline').forEach(el=>{
+            const fill = el.getAttribute('fill');
+            const stroke = el.getAttribute('stroke');
+            if(fill && fill !== 'none' && fill !== 'white' && fill !== '#ffffff') el.setAttribute('fill','#000');
+            if(stroke && stroke !== 'none' && stroke !== 'white') el.setAttribute('stroke','#000');
           });
-        } catch(e){ document.body.removeChild(tmpDiv); continue; }
+          clone.querySelectorAll('text').forEach(el=>{ el.setAttribute('fill','#000'); });
 
-        const svg = tmpDiv.querySelector('svg');
-        if(!svg) { document.body.removeChild(tmpDiv); continue; }
+          const svgW = parseFloat(svg.getAttribute('width')) || svg.clientWidth || 600;
+          const svgH = parseFloat(svg.getAttribute('height')) || svg.clientHeight || 80;
+          clone.setAttribute('width', svgW);
+          clone.setAttribute('height', svgH);
 
-        // Style SVG elements for export (black)
-        svg.querySelectorAll('path,rect,ellipse,line,text').forEach(el=>{
-          if(el.style) { el.style.fill='#000'; el.style.stroke='#000'; }
-        });
-        // Ensure xmlns is set for standalone SVG parsing
-        if(!svg.getAttribute('xmlns')) svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
+          const svgStr = new XMLSerializer().serializeToString(clone);
+          
+          // Try multiple approaches for Safari compatibility
+          const canvas = document.createElement('canvas');
+          const scale = 2;
+          canvas.width = svgW * scale;
+          canvas.height = svgH * scale;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = 'white';
+          ctx.fillRect(0,0,canvas.width,canvas.height);
 
-        const svgData = new XMLSerializer().serializeToString(svg);
-        const svgW = parseFloat(svg.getAttribute('width')) || svg.getBoundingClientRect().width || 600;
-        const svgH = parseFloat(svg.getAttribute('height')) || svg.getBoundingClientRect().height || 80;
+          const img = new Image();
+          img.width = svgW * scale;
+          img.height = svgH * scale;
 
-        // Convert SVG to canvas using data URL (more reliable than blob URL on Safari)
-        const canvas = document.createElement('canvas');
-        const scale = 2; // balance quality vs memory
-        canvas.width = svgW * scale;
-        canvas.height = svgH * scale;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0,0,canvas.width,canvas.height);
+          // Use blob URL (works better on Safari than data URL for SVGs)
+          const svgBlob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
+          const blobUrl = URL.createObjectURL(svgBlob);
 
-        const img = new Image();
-        const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+          let loaded = false;
+          try {
+            await new Promise((res, rej)=>{
+              img.onload = ()=>{ loaded=true; res(); };
+              img.onerror = rej;
+              img.src = blobUrl;
+            });
+          } catch(imgErr) {
+            // Fallback: try data URL
+            console.warn('Blob URL failed for exercise', i, ', trying data URL');
+            try {
+              const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+              await new Promise((res, rej)=>{
+                img.onload = ()=>{ loaded=true; res(); };
+                img.onerror = rej;
+                img.src = dataUrl;
+              });
+            } catch(e2) {
+              console.error('Both SVG load methods failed for exercise', i);
+            }
+          }
 
-        await new Promise((res,rej)=>{
-          img.onload = res;
-          img.onerror = (e)=>{ console.error('SVG load error for exercise',i,e); res(); }; // skip on error, don't abort
-          img.src = dataUrl;
-        });
+          URL.revokeObjectURL(blobUrl);
+          if(tmpDiv) document.body.removeChild(tmpDiv);
 
-        if(img.naturalWidth === 0) { document.body.removeChild(tmpDiv); continue; } // skip if image didn't load
+          if(!loaded) continue;
 
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        document.body.removeChild(tmpDiv);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        const imgData = canvas.toDataURL('image/png');
-        const drawW = usableW;
-        const drawH = (svgH / svgW) * drawW;
+          let imgData;
+          try { imgData = canvas.toDataURL('image/png'); }
+          catch(taintErr) { console.error('Canvas tainted for exercise', i); continue; }
+
+          const drawW = usableW;
+          const drawH = (svgH / svgW) * drawW;
 
         // Check if we need a new page
         if(curY + drawH + 20 > pageH - margin) {
@@ -5152,6 +5258,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
 
         pdf.addImage(imgData, 'PNG', margin, curY, drawW, drawH);
         curY += drawH + 8;
+        } catch(exErr) { console.error('Failed to export exercise', i, exErr); }
       }
 
       // Download
@@ -5159,7 +5266,8 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
       pdf.save(filename);
     } catch(e) {
       console.error('PDF export failed', e);
-      alert('PDF export failed: ' + (e.message||'Unknown error') + '\n\nCheck console for details.');
+      const msg = e instanceof Error ? e.message : (typeof e === 'string' ? e : JSON.stringify(e));
+      alert('PDF export failed: ' + (msg||'Unknown error') + '\n\nCheck console for details.');
     }
     setExporting(false);
   };
