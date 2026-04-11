@@ -5194,7 +5194,7 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
 
       // Create render container — fully opaque, behind progress overlay
       const renderBox = document.createElement('div');
-      renderBox.style.cssText='position:fixed;left:0;top:0;width:'+Math.round(usableW*1.38)+'px;background:white;z-index:9998;padding:4px 8px;';
+      renderBox.style.cssText='position:fixed;left:0;top:0;width:900px;background:white;z-index:9998;padding:8px 16px;overflow:visible;';
       document.body.appendChild(renderBox);
 
       // Full-viewport progress overlay on top
@@ -5218,8 +5218,8 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
           renderBox.innerHTML = '';
           const abc = buildAbcString(exercises[i].pat, selNotes, clef, key);
           window.ABCJS.renderAbc(renderBox, abc, {
-            scale:0.85, staffwidth: Math.round(usableW * 1.3),
-            paddingright:6,paddingleft:6,paddingbottom:2,paddingtop:2,
+            scale:0.85, staffwidth: 820,
+            paddingright:12,paddingleft:12,paddingbottom:4,paddingtop:4,
             add_classes:true,
             wrap:{minSpacing:1.5, maxSpacing:2.6, preferredMeasuresPerLine:4},
           });
