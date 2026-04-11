@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
 
 /* ═══════════════════════════════════════════════════════════════════════
    SUPABASE
@@ -5172,100 +5171,52 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
 
   const [exporting, setExporting] = useState(false);
 
-  const exportPdf = async () => {
-    setExporting(true);
-    try {
-      const pdf = new jsPDF({orientation:'portrait', unit:'pt', format:'letter'});
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const margin = 36;
-      const usableW = pageW - margin*2;
-      let curY = margin;
+  const exportPdf = () => {
+    // Open a print-ready page with all exercises — browser handles pagination
+    const keyMap={'C':'C','G':'G','D':'D','A':'A','E':'E','B':'B','Fs':'F#','F':'F','Bb':'Bb','Eb':'Eb','Ab':'Ab','Db':'Db','Gb':'Gb'};
+    const abcKey = keyMap[key]||'C';
 
-      // Title
-      pdf.setFont('helvetica','bold');
-      pdf.setFontSize(14);
-      pdf.text(docName || 'Rhythm Exercises', margin, curY + 12);
-      curY += 24;
-      pdf.setFont('helvetica','normal');
-      pdf.setFontSize(8);
-      pdf.text(`${selNotes.length} notes \u00b7 ${g2s(activeGroup)} \u00b7 Key: ${key} \u00b7 ${new Date().toLocaleDateString()}`, margin, curY);
-      curY += 16;
+    const printWin = window.open('','_blank');
+    if(!printWin) { alert('Please allow popups to export.'); return; }
 
-      // Create render container — fully opaque, behind progress overlay
-      const renderBox = document.createElement('div');
-      renderBox.style.cssText='position:fixed;left:0;top:0;width:900px;background:white;z-index:9998;padding:8px 16px;overflow:visible;';
-      document.body.appendChild(renderBox);
+    // Build ABC strings here so we can pass them as data
+    const abcStrings = exercises.map(ex => buildAbcString(ex.pat, selNotes, clef, key));
 
-      // Full-viewport progress overlay on top
-      const overlay = document.createElement('div');
-      overlay.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(255,255,255,0.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
-      overlay.innerHTML=`<div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:0.12em;color:#4a78ff">GENERATING PDF</div><div id="pfn-export-msg" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.1rem;color:#666">Preparing...</div><div style="width:200px;height:4px;background:#e0e0e0;border-radius:2px;overflow:hidden"><div id="pfn-export-bar" style="height:100%;background:#4a78ff;border-radius:2px;width:0%;transition:width 0.3s"></div></div><div style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:0.9rem;color:#999;margin-top:8px">This may take a minute for many exercises</div>`;
-      document.body.appendChild(overlay);
-      const updateProgress = (i) => {
-        const msg = overlay.querySelector('#pfn-export-msg');
-        const bar = overlay.querySelector('#pfn-export-bar');
-        if(msg) msg.textContent = `Rendering ${i+1} of ${exercises.length}...`;
-        if(bar) bar.style.width = Math.round(((i+1)/exercises.length)*100)+'%';
-      };
-      document.body.appendChild(renderBox);
+    let exHtml = '';
+    exercises.forEach((ex,i) => {
+      exHtml += '<div class="ex-wrap"><div class="ex-label">'+(i+1)+'. '+ex.pat.timeSig+' \u00b7 '+ex.pat.section.replace(' Rhythm Patterns','')+'</div><div class="ex-staff" id="ex-'+i+'"></div></div>';
+    });
 
-      for(let i=0; i<exercises.length; i++) {
-        updateProgress(i);
-        await new Promise(r=>setTimeout(r,30));
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+      +'<title>'+(docName||'Rhythm Exercises')+'</title>'
+      +'<script src="https://cdn.jsdelivr.net/npm/abcjs@6.4.4/dist/abcjs-basic-min.js"><\/script>'
+      +'<style>'
+      +'@page{margin:0.5in 0.6in;size:letter portrait;}'
+      +'*{box-sizing:border-box;}'
+      +'body{font-family:Helvetica,Arial,sans-serif;color:#000;margin:0;padding:0;}'
+      +'.title{font-size:16pt;font-weight:bold;margin:0 0 2px;}'
+      +'.subtitle{font-size:8pt;color:#666;margin:0 0 12px;}'
+      +'.ex-wrap{page-break-inside:avoid;break-inside:avoid;margin-bottom:6px;}'
+      +'.ex-label{font-size:7pt;color:#999;margin:4px 0 1px;font-family:monospace;}'
+      +'.ex-staff svg{max-width:100%;}'
+      +'.ex-staff svg path,.ex-staff svg line,.ex-staff svg text,.ex-staff svg rect,.ex-staff svg ellipse{fill:#000!important;stroke:#000!important;}'
+      +'@media print{.no-print{display:none!important;}}'
+      +'</style></head><body>'
+      +'<div class="title">'+(docName||'Rhythm Exercises')+'</div>'
+      +'<div class="subtitle">'+selNotes.length+' notes \u00b7 '+g2s(activeGroup)+' \u00b7 Key: '+abcKey+' \u00b7 '+new Date().toLocaleDateString()+'</div>'
+      +exHtml
+      +'<div class="no-print" style="text-align:center;padding:20px;"><button onclick="window.print()" style="font-size:16px;padding:12px 32px;background:#4a78ff;color:white;border:none;border-radius:8px;cursor:pointer;">Print / Save as PDF</button></div>'
+      +'<script>var abcData='+JSON.stringify(abcStrings)+';'
+      +'window.addEventListener("load",function(){'
+      +'abcData.forEach(function(abc,i){'
+      +'var div=document.getElementById("ex-"+i);if(!div)return;'
+      +'try{ABCJS.renderAbc(div,abc,{scale:0.8,staffwidth:580,paddingright:6,paddingleft:6,paddingbottom:2,paddingtop:2,add_classes:true,wrap:{minSpacing:1.5,maxSpacing:2.6,preferredMeasuresPerLine:4}});}catch(e){}'
+      +'});'
+      +'});'
+      +'<\/script></body></html>';
 
-        try {
-          renderBox.innerHTML = '';
-          const abc = buildAbcString(exercises[i].pat, selNotes, clef, key);
-          window.ABCJS.renderAbc(renderBox, abc, {
-            scale:0.85, staffwidth: 820,
-            paddingright:12,paddingleft:12,paddingbottom:4,paddingtop:4,
-            add_classes:true,
-            wrap:{minSpacing:1.5, maxSpacing:2.6, preferredMeasuresPerLine:4},
-          });
-
-          renderBox.querySelectorAll('svg path,svg rect,svg ellipse,svg line,svg text').forEach(el=>{
-            el.style.fill='#000'; el.style.stroke='#000';
-          });
-
-          await new Promise(r=>requestAnimationFrame(r));
-
-          const canvas = await html2canvas(renderBox, {
-            scale: 1.5, backgroundColor: '#ffffff', logging: false,
-          });
-
-          const imgData = canvas.toDataURL('image/png');
-          const drawW = usableW;
-          const drawH = (canvas.height / canvas.width) * drawW;
-
-          if(curY + drawH + 16 > pageH - margin) {
-            pdf.addPage();
-            curY = margin;
-          }
-
-          pdf.setFont('helvetica','normal');
-          pdf.setFontSize(7);
-          pdf.setTextColor(130);
-          pdf.text(`${i+1}. ${exercises[i].pat.timeSig}  \u00b7  ${exercises[i].pat.section.replace(' Rhythm Patterns','')}`, margin, curY + 7);
-          pdf.setTextColor(0);
-          curY += 10;
-
-          pdf.addImage(imgData, 'PNG', margin, curY, drawW, drawH);
-          curY += drawH + 6;
-        } catch(exErr) { console.error('Failed to export exercise', i, exErr); }
-      }
-
-      document.body.removeChild(renderBox);
-      document.body.removeChild(overlay);
-      pdf.save((docName||'rhythm-exercises').replace(/[^a-z0-9]/gi,'_')+'.pdf');
-    } catch(e) {
-      console.error('PDF export failed', e);
-      document.querySelectorAll('[id^="pfn-export"]').forEach(el=>el.parentElement?.remove());
-      try { document.body.querySelectorAll('[style*="z-index: 9998"]').forEach(el=>el.remove()); } catch(x){}
-      try { document.body.querySelectorAll('[style*="z-index: 9999"]').forEach(el=>el.remove()); } catch(x){}
-      alert('Export failed: '+(e instanceof Error?e.message:String(e)));
-    }
-    setExporting(false);
+    printWin.document.write(html);
+    printWin.document.close();
   };
 
   const ExercisePanelLarge = generated && exercises.length>0 && (
