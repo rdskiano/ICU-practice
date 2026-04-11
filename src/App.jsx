@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 /* ═══════════════════════════════════════════════════════════════════════
    SUPABASE
@@ -5174,7 +5175,6 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
   const exportPdf = async () => {
     setExporting(true);
     try {
-      // jsPDF imported at top of file
       const pdf = new jsPDF({orientation:'portrait', unit:'pt', format:'letter'});
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
@@ -5189,129 +5189,60 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
       curY += 30;
       pdf.setFont('helvetica','normal');
       pdf.setFontSize(9);
-      pdf.text(`${selNotes.length} notes · ${g2s(activeGroup)} · Key: ${murKey} · ${new Date().toLocaleDateString()}`, margin, curY);
+      pdf.text(`${selNotes.length} notes \u00b7 ${g2s(activeGroup)} \u00b7 Key: ${murKey} \u00b7 ${new Date().toLocaleDateString()}`, margin, curY);
       curY += 20;
 
-      // Render each exercise SVG to canvas then to PDF
       for(let i=0; i<exercises.length; i++) {
         try {
-          // Use the already-rendered on-screen SVG if available, otherwise render fresh
-          let svg = document.querySelector('#mur-ex-'+i+' svg');
-          let tmpDiv = null;
+          const tmpDiv = document.createElement('div');
+          tmpDiv.style.cssText='position:fixed;left:0;top:0;width:680px;background:white;z-index:9999;padding:8px 12px;';
+          document.body.appendChild(tmpDiv);
 
-          if(!svg) {
-            tmpDiv = document.createElement('div');
-            tmpDiv.style.cssText='position:fixed;left:0;top:0;width:700px;background:white;opacity:0;pointer-events:none;z-index:-1;';
-            document.body.appendChild(tmpDiv);
-            const abc = buildAbcString(exercises[i].pat, selNotes, clef, murKey);
-            window.ABCJS.renderAbc(tmpDiv, abc, {
-              scale:1.3, staffwidth: Math.round(usableW * 1.25),
-              paddingright:10,paddingleft:10,paddingbottom:4,paddingtop:4,
-              add_classes:true,
-              wrap:{minSpacing:1.5, maxSpacing:2.6, preferredMeasuresPerLine:4},
-            });
-            svg = tmpDiv.querySelector('svg');
-          }
-
-          if(!svg) { if(tmpDiv) document.body.removeChild(tmpDiv); continue; }
-
-          // Clone the SVG so we don't modify the on-screen version
-          const clone = svg.cloneNode(true);
-          clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
-          clone.querySelectorAll('path,rect,ellipse,line,polygon,polyline').forEach(el=>{
-            const fill = el.getAttribute('fill');
-            const stroke = el.getAttribute('stroke');
-            if(fill && fill !== 'none' && fill !== 'white' && fill !== '#ffffff') el.setAttribute('fill','#000');
-            if(stroke && stroke !== 'none' && stroke !== 'white') el.setAttribute('stroke','#000');
+          const abc = buildAbcString(exercises[i].pat, selNotes, clef, murKey);
+          window.ABCJS.renderAbc(tmpDiv, abc, {
+            scale:1.3, staffwidth: Math.round(usableW * 1.2),
+            paddingright:10,paddingleft:10,paddingbottom:4,paddingtop:4,
+            add_classes:true,
+            wrap:{minSpacing:1.5, maxSpacing:2.6, preferredMeasuresPerLine:4},
           });
-          clone.querySelectorAll('text').forEach(el=>{ el.setAttribute('fill','#000'); });
 
-          const svgW = parseFloat(svg.getAttribute('width')) || svg.clientWidth || 600;
-          const svgH = parseFloat(svg.getAttribute('height')) || svg.clientHeight || 80;
-          clone.setAttribute('width', svgW);
-          clone.setAttribute('height', svgH);
+          tmpDiv.querySelectorAll('svg path,svg rect,svg ellipse,svg line,svg text').forEach(el=>{
+            el.style.fill='#000'; el.style.stroke='#000';
+          });
 
-          const svgStr = new XMLSerializer().serializeToString(clone);
-          
-          // Try multiple approaches for Safari compatibility
-          const canvas = document.createElement('canvas');
-          const scale = 2;
-          canvas.width = svgW * scale;
-          canvas.height = svgH * scale;
-          const ctx = canvas.getContext('2d');
-          ctx.fillStyle = 'white';
-          ctx.fillRect(0,0,canvas.width,canvas.height);
+          await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 
-          const img = new Image();
-          img.width = svgW * scale;
-          img.height = svgH * scale;
+          const canvas = await html2canvas(tmpDiv, {
+            scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true,
+          });
 
-          // Use blob URL (works better on Safari than data URL for SVGs)
-          const svgBlob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
-          const blobUrl = URL.createObjectURL(svgBlob);
+          document.body.removeChild(tmpDiv);
 
-          let loaded = false;
-          try {
-            await new Promise((res, rej)=>{
-              img.onload = ()=>{ loaded=true; res(); };
-              img.onerror = rej;
-              img.src = blobUrl;
-            });
-          } catch(imgErr) {
-            // Fallback: try data URL
-            console.warn('Blob URL failed for exercise', i, ', trying data URL');
-            try {
-              const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
-              await new Promise((res, rej)=>{
-                img.onload = ()=>{ loaded=true; res(); };
-                img.onerror = rej;
-                img.src = dataUrl;
-              });
-            } catch(e2) {
-              console.error('Both SVG load methods failed for exercise', i);
-            }
+          const imgData = canvas.toDataURL('image/png');
+          const drawW = usableW;
+          const drawH = (canvas.height / canvas.width) * drawW;
+
+          if(curY + drawH + 20 > pageH - margin) {
+            pdf.addPage();
+            curY = margin;
           }
 
-          URL.revokeObjectURL(blobUrl);
-          if(tmpDiv) document.body.removeChild(tmpDiv);
+          pdf.setFont('helvetica','normal');
+          pdf.setFontSize(8);
+          pdf.setTextColor(120);
+          pdf.text(`${i+1}. ${exercises[i].pat.timeSig}  \u00b7  ${exercises[i].pat.section.replace(' Rhythm Patterns','')}`, margin, curY + 8);
+          pdf.setTextColor(0);
+          curY += 12;
 
-          if(!loaded) continue;
-
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-          let imgData;
-          try { imgData = canvas.toDataURL('image/png'); }
-          catch(taintErr) { console.error('Canvas tainted for exercise', i); continue; }
-
-          const drawW = usableW;
-          const drawH = (svgH / svgW) * drawW;
-
-        // Check if we need a new page
-        if(curY + drawH + 20 > pageH - margin) {
-          pdf.addPage();
-          curY = margin;
-        }
-
-        // Exercise label
-        pdf.setFont('helvetica','normal');
-        pdf.setFontSize(8);
-        pdf.setTextColor(120);
-        pdf.text(`${i+1}. ${exercises[i].pat.timeSig}  ·  ${exercises[i].pat.section.replace(' Rhythm Patterns','')}`, margin, curY + 8);
-        pdf.setTextColor(0);
-        curY += 12;
-
-        pdf.addImage(imgData, 'PNG', margin, curY, drawW, drawH);
-        curY += drawH + 8;
+          pdf.addImage(imgData, 'PNG', margin, curY, drawW, drawH);
+          curY += drawH + 8;
         } catch(exErr) { console.error('Failed to export exercise', i, exErr); }
       }
 
-      // Download
-      const filename = `${(docName||'rhythm-exercises').replace(/[^a-z0-9]/gi,'_')}.pdf`;
-      pdf.save(filename);
+      pdf.save((docName||'rhythm-exercises').replace(/[^a-z0-9]/gi,'_')+'.pdf');
     } catch(e) {
       console.error('PDF export failed', e);
-      const msg = e instanceof Error ? e.message : (typeof e === 'string' ? e : JSON.stringify(e));
-      alert('PDF export failed: ' + (msg||'Unknown error') + '\n\nCheck console for details.');
+      alert('Export failed: '+(e instanceof Error?e.message:String(e)));
     }
     setExporting(false);
   };
