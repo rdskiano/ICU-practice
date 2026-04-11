@@ -177,6 +177,75 @@ function useIsLarge() {
   return large;
 }
 
+function usePinchZoom() {
+  const [zoom, setZoom] = useState({scale:1, tx:0, ty:0});
+  const pinchRef = useRef(null);
+  const panRef = useRef(null);
+  const lastTapRef = useRef(0);
+
+  const isZoomed = zoom.scale > 1.05;
+
+  const getDistance = (t1,t2) => Math.hypot(t1.clientX-t2.clientX, t1.clientY-t2.clientY);
+  const getMidpoint = (t1,t2) => ({x:(t1.clientX+t2.clientX)/2, y:(t1.clientY+t2.clientY)/2});
+
+  const onTouchStart = (e) => {
+    if(e.touches.length === 2) {
+      e.preventDefault();
+      const d = getDistance(e.touches[0], e.touches[1]);
+      const mid = getMidpoint(e.touches[0], e.touches[1]);
+      pinchRef.current = {startDist:d, startScale:zoom.scale, startTx:zoom.tx, startTy:zoom.ty, midX:mid.x, midY:mid.y};
+      panRef.current = null;
+    } else if(e.touches.length === 1 && isZoomed) {
+      e.preventDefault();
+      panRef.current = {startX:e.touches[0].clientX, startY:e.touches[0].clientY, startTx:zoom.tx, startTy:zoom.ty};
+    }
+  };
+
+  const onTouchMove = (e) => {
+    if(e.touches.length === 2 && pinchRef.current) {
+      e.preventDefault();
+      const d = getDistance(e.touches[0], e.touches[1]);
+      const newScale = Math.max(1, Math.min(5, pinchRef.current.startScale * (d / pinchRef.current.startDist)));
+      setZoom({scale:newScale, tx:pinchRef.current.startTx, ty:pinchRef.current.startTy});
+    } else if(e.touches.length === 1 && panRef.current && isZoomed) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - panRef.current.startX;
+      const dy = e.touches[0].clientY - panRef.current.startY;
+      setZoom(z=>({...z, tx:panRef.current.startTx+dx, ty:panRef.current.startTy+dy}));
+    }
+  };
+
+  const onTouchEnd = (e) => {
+    if(pinchRef.current && e.touches.length < 2) {
+      pinchRef.current = null;
+      // Snap to 1x if close
+      setZoom(z => z.scale < 1.1 ? {scale:1,tx:0,ty:0} : z);
+    }
+    if(panRef.current && e.touches.length === 0) {
+      panRef.current = null;
+    }
+    // Double-tap to reset
+    if(e.touches.length === 0 && e.changedTouches.length === 1) {
+      const now = Date.now();
+      if(now - lastTapRef.current < 300 && isZoomed) {
+        setZoom({scale:1,tx:0,ty:0});
+        lastTapRef.current = 0;
+      } else {
+        lastTapRef.current = now;
+      }
+    }
+  };
+
+  const resetZoom = () => setZoom({scale:1,tx:0,ty:0});
+
+  const style = zoom.scale > 1 ? {
+    transform:`translate(${zoom.tx}px,${zoom.ty}px) scale(${zoom.scale})`,
+    transformOrigin:'center center',
+  } : {};
+
+  return {zoom, isZoomed, style, onTouchStart, onTouchMove, onTouchEnd, resetZoom};
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    ICU STEP GENERATOR
 ═══════════════════════════════════════════════════════════════════════ */
@@ -1714,10 +1783,12 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   locateEx, onBack, onTapPassage, onLaunchStrategy, profile, suppressPicker }) {
 
   const land = useOrientation();
+  const pz = usePinchZoom();
   const totalPages = pageImages.length;
   const showTwo = land && totalPages > 1;
   const rightPage = currentPage + 1 < totalPages ? currentPage + 1 : null;
   const [showSessionPicker, setShowSessionPicker] = useState(false);
+  useEffect(()=>pz.resetZoom(),[currentPage]); // reset zoom on page change
   // Timer mode
   const [timerTotal, setTimerTotal] = useState(null); // seconds
   const [timerLeft, setTimerLeft] = useState(null);
@@ -2289,6 +2360,8 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const touchHandled = useRef(false); // prevent click after touch
 
   const handleTouchStart = (e) => {
+    if(e.touches.length >= 2) { pz.onTouchStart(e); return; }
+    if(pz.isZoomed) { pz.onTouchStart(e); return; } // pan when zoomed
     e.preventDefault();
     touchHandled.current = true;
     const t = e.touches[0];
@@ -2296,6 +2369,8 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   };
 
   const handleTouchMove = (e) => {
+    if(e.touches.length >= 2) { pz.onTouchMove(e); return; }
+    if(pz.isZoomed) { pz.onTouchMove(e); return; }
     const t = e.touches[0];
     const dx = Math.abs(t.clientX - touchRef.current.startX);
     const dy = Math.abs(t.clientY - touchRef.current.startY);
@@ -2305,6 +2380,8 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   };
 
   const handleTouchEnd = (e) => {
+    if(pz.isZoomed) { pz.onTouchEnd(e); return; }
+    pz.onTouchEnd(e); // let it detect double-tap even when not zoomed
     if(touchRef.current.longFired) return;
     const endX = e.changedTouches[0].clientX;
     const endY = e.changedTouches[0].clientY;
@@ -2990,7 +3067,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
             borderRadius:16,padding:'14px 16px',
             boxShadow:'0 4px 24px rgba(0,0,0,0.25)',
-            width:220,display:'flex',flexDirection:'column',gap:10,
+            width:280,display:'flex',flexDirection:'column',gap:12,
             cursor:'grab',touchAction:'none',userSelect:'none',WebkitUserSelect:'none',
           }}>
           {/* Header */}
@@ -3038,12 +3115,12 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
           </div>
 
           {/* Input gain */}
-          <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',color:'rgba(255,255,255,0.5)',letterSpacing:'0.06em'}}>GAIN</span>
-            <input type="range" min="0.5" max="3.0" step="0.1" value={recGain}
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',color:'rgba(255,255,255,0.6)',letterSpacing:'0.06em'}}>🎤 GAIN</span>
+            <input type="range" min="0" max="1.0" step="0.05" value={recGain}
               onChange={e=>setRecGain(parseFloat(e.target.value))}
-              style={{flex:1,height:4,accentColor:'#dc3232',cursor:'pointer'}} />
-            <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.6rem',color:'rgba(255,255,255,0.6)',minWidth:28,textAlign:'right'}}>{Math.round(recGain*100)}%</span>
+              style={{flex:1,height:6,accentColor:'#dc3232',cursor:'pointer'}} />
+            <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.7rem',color:'rgba(255,255,255,0.7)',minWidth:32,textAlign:'right'}}>{Math.round(recGain*100)}%</span>
           </div>
 
           {/* Recordings list */}
@@ -3244,7 +3321,8 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
             onClick={handleClick}
             style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
               userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none',
-              cursor: isInterleaved?'crosshair':'default'}}
+              cursor: isInterleaved?'crosshair':'default',
+              ...pz.style, transition: pz.isZoomed ? 'none' : 'transform 0.2s'}}
             onContextMenu={e=>e.preventDefault()}
             draggable={false} />
           {/* Annotation canvas */}
@@ -3632,6 +3710,7 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
   const [metroBpm, setMetroBpm] = useState(80);
   const [subdiv, setSubdiv] = useState(1);
   const [ilMetroVol, setIlMetroVol] = useState(1.0);
+  const pz = usePinchZoom();
 
   // Recorder
   const [showRecorder, setShowRecorder] = useState(false);
@@ -3756,6 +3835,7 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
   };
   useEffect(()=>{ currentSpotIdRef.current = currentSpotId; },[currentSpotId]);
   useEffect(()=>{ currentPageRef.current   = currentPage;   },[currentPage]);
+  useEffect(()=>pz.resetZoom(),[currentPage,currentSpotId]);
   // When spot changes: if it has a locked BPM, auto-load it; otherwise keep current
   useEffect(()=>{
     if(!currentSpotId) return;
@@ -4025,7 +4105,7 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
             position:'absolute',top:8,right:8,zIndex:30,
             background:'rgba(50,50,50,0.95)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
             borderRadius:16,padding:'12px 14px',boxShadow:'0 4px 24px rgba(0,0,0,0.25)',
-            width:240,display:'flex',flexDirection:'column',gap:8,
+            width:280,display:'flex',flexDirection:'column',gap:8,
           }}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.8rem',letterSpacing:'0.1em',color:'#fff'}}>
@@ -4059,12 +4139,12 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
               )}
             </div>
             {/* Input gain */}
-            <div style={{display:'flex',alignItems:'center',gap:6}}>
-              <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',color:'rgba(255,255,255,0.5)',letterSpacing:'0.06em'}}>GAIN</span>
-              <input type="range" min="0.5" max="3.0" step="0.1" value={ilRecGain}
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',color:'rgba(255,255,255,0.6)',letterSpacing:'0.06em'}}>🎤 GAIN</span>
+              <input type="range" min="0" max="1.0" step="0.05" value={ilRecGain}
                 onChange={e=>setIlRecGain(parseFloat(e.target.value))}
-                style={{flex:1,height:4,accentColor:'#dc3232',cursor:'pointer'}} />
-              <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.6rem',color:'rgba(255,255,255,0.6)',minWidth:28,textAlign:'right'}}>{Math.round(ilRecGain*100)}%</span>
+                style={{flex:1,height:6,accentColor:'#dc3232',cursor:'pointer'}} />
+              <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.7rem',color:'rgba(255,255,255,0.7)',minWidth:32,textAlign:'right'}}>{Math.round(ilRecGain*100)}%</span>
             </div>
             {/* This spot's recordings */}
             {curSpotRecs.length > 0 && (
@@ -4133,11 +4213,13 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
 
         {/* Left page */}
         <div ref={containerRef} style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}
-          onTouchStart={e=>{e.currentTarget._sw={x:e.touches[0].clientX,t:Date.now()};}}
-          onTouchEnd={e=>{const s=e.currentTarget._sw;if(!s)return;const dx=e.changedTouches[0].clientX-s.x;if(Math.abs(dx)>60&&Date.now()-s.t<400){if(dx<0&&currentPage<totalPages-1)setCurrentPage(p=>showTwo?p+2:p+1);if(dx>0&&currentPage>0)setCurrentPage(p=>showTwo?Math.max(0,p-2):p-1);}}}>
+          onTouchStart={e=>{if(e.touches.length>=2){pz.onTouchStart(e);return;}if(pz.isZoomed){pz.onTouchStart(e);return;}e.currentTarget._sw={x:e.touches[0].clientX,t:Date.now()};}}
+          onTouchMove={e=>{if(e.touches.length>=2||pz.isZoomed){pz.onTouchMove(e);return;}}}
+          onTouchEnd={e=>{pz.onTouchEnd(e);if(pz.isZoomed)return;const s=e.currentTarget._sw;if(!s)return;const dx=e.changedTouches[0].clientX-s.x;if(Math.abs(dx)>60&&Date.now()-s.t<400){if(dx<0&&currentPage<totalPages-1)setCurrentPage(p=>showTwo?p+2:p+1);if(dx>0&&currentPage>0)setCurrentPage(p=>showTwo?Math.max(0,p-2):p-1);}}}>
           <img ref={imgRef} src={pageImages[currentPage]}
             style={{width:'100%',height:'100%',objectFit:'contain',display:'block',
-              userSelect:'none',WebkitUserSelect:'none'}}
+              userSelect:'none',WebkitUserSelect:'none',
+              ...pz.style, transition: pz.isZoomed ? 'none' : 'transform 0.2s'}}
             draggable={false}
             onLoad={()=>{
               const id=currentSpotIdRef.current;
@@ -6033,7 +6115,9 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
   const metro = useRef(new Metro());
   const [scuSubdiv, setScuSubdiv] = useState(1);
   const land = useOrientation();
+  const pz = usePinchZoom();
   const [currentPage, setCurrentPage] = useState(tapPos?.page||0);
+  useEffect(()=>pz.resetZoom(),[currentPage]);
 
   useEffect(()=>()=>metro.current.stop(),[]);
   useEffect(()=>{if(metroOn)metro.current.start(bpm);else metro.current.stop();},[metroOn]);
@@ -6342,10 +6426,15 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
 
         <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}
           onTouchStart={e=>{
+            if(e.touches.length>=2){pz.onTouchStart(e);return;}
+            if(pz.isZoomed){pz.onTouchStart(e);return;}
             const t=e.touches[0];
             e.currentTarget._swipe={x:t.clientX,time:Date.now()};
           }}
+          onTouchMove={e=>{if(e.touches.length>=2||pz.isZoomed){pz.onTouchMove(e);return;}}}
           onTouchEnd={e=>{
+            pz.onTouchEnd(e);
+            if(pz.isZoomed) return;
             const sw=e.currentTarget._swipe;
             if(!sw) return;
             const dx=e.changedTouches[0].clientX-sw.x;
@@ -6355,7 +6444,8 @@ function SlowClickUpScreen({ profile, piece, pageImages, tapPos, scuSpot, onBack
             }
           }}>
           <img src={pageImages[currentPage]}
-            style={{width:'100%',height:'100%',objectFit:'contain',display:'block',userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none'}}
+            style={{width:'100%',height:'100%',objectFit:'contain',display:'block',userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none',
+              ...pz.style, transition: pz.isZoomed ? 'none' : 'transform 0.2s'}}
             onContextMenu={e=>e.preventDefault()}
             draggable={false} />
         </div>
@@ -6651,9 +6741,11 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
   const [loaded,setLoaded]   = useState(false);
   const [loaded2,setLoaded2] = useState(false);
   const land = useOrientation();
+  const pz = usePinchZoom();
   const totalPages = pageImages.length;
   const showTwoPages = land && totalPages>1;
   const rightPage = currentPage+1<totalPages?currentPage+1:null;
+  useEffect(()=>pz.resetZoom(),[currentPage]);
 
   const drawArrow = (ctx,px,py,color) => {
     const w=10,h=13;
@@ -6790,13 +6882,15 @@ function MarkerScreen({ piece, pageImages, currentPage, setCurrentPage, markers,
           }}>›</button>
         )}
         <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}
-          onTouchStart={e=>{e.currentTarget._sw={x:e.touches[0].clientX,t:Date.now()};}}
-          onTouchEnd={e=>{const s=e.currentTarget._sw;if(!s)return;const dx=e.changedTouches[0].clientX-s.x;if(Math.abs(dx)>60&&Date.now()-s.t<400){if(dx<0&&currentPage<totalPages-1)setCurrentPage(p=>showTwoPages?p+2:p+1);if(dx>0&&currentPage>0)setCurrentPage(p=>showTwoPages?Math.max(0,p-2):p-1);}}}>
+          onTouchStart={e=>{if(e.touches.length>=2){pz.onTouchStart(e);return;}if(pz.isZoomed){pz.onTouchStart(e);return;}e.currentTarget._sw={x:e.touches[0].clientX,t:Date.now()};}}
+          onTouchMove={e=>{if(e.touches.length>=2||pz.isZoomed){pz.onTouchMove(e);return;}}}
+          onTouchEnd={e=>{pz.onTouchEnd(e);if(pz.isZoomed)return;const s=e.currentTarget._sw;if(!s)return;const dx=e.changedTouches[0].clientX-s.x;if(Math.abs(dx)>60&&Date.now()-s.t<400){if(dx<0&&currentPage<totalPages-1)setCurrentPage(p=>showTwoPages?p+2:p+1);if(dx>0&&currentPage>0)setCurrentPage(p=>showTwoPages?Math.max(0,p-2):p-1);}}}>
           <img ref={imgRef} src={pageImages[currentPage]}
             onLoad={()=>{setLoaded(true);requestAnimationFrame(()=>draw());}}
             onClick={handleTap}
             style={{width:'100%',height:'95%',objectFit:'contain',display:'block',
-              userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none',WebkitTouchCallout:'none'}}
+              userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none',
+              ...pz.style, transition: pz.isZoomed ? 'none' : 'transform 0.2s'}}
             onContextMenu={e=>e.preventDefault()}
             draggable={false} />
           <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none'}} />
@@ -6878,6 +6972,8 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
   const canvasRef2S = useRef();
   const [imgLoaded,setImgLoaded]   = useState(false);
   const [imgLoaded2,setImgLoaded2] = useState(false);
+  const pz = usePinchZoom();
+  useEffect(()=>pz.resetZoom(),[currentPage]);
   const land = useOrientation();
 
   const safeIdx  = Math.min(idx,steps.length-1);
@@ -7024,11 +7120,13 @@ function SessionScreen({ pageImages, markers, N, startTempo, goalTempo, incremen
         }}>›</button>
       )}
       <div style={{position:'relative',flex:1,minWidth:0,overflow:'hidden'}}
-        onTouchStart={e=>{e.currentTarget._sw={x:e.touches[0].clientX,t:Date.now()};}}
-        onTouchEnd={e=>{const s=e.currentTarget._sw;if(!s)return;const dx=e.changedTouches[0].clientX-s.x;if(Math.abs(dx)>60&&Date.now()-s.t<400){if(dx<0&&currentPage<pageImages.length-1)setCurrentPage(p=>showTwo?p+2:p+1);if(dx>0&&currentPage>0)setCurrentPage(p=>showTwo?Math.max(0,p-2):p-1);}}}>
+        onTouchStart={e=>{if(e.touches.length>=2){pz.onTouchStart(e);return;}if(pz.isZoomed){pz.onTouchStart(e);return;}e.currentTarget._sw={x:e.touches[0].clientX,t:Date.now()};}}
+        onTouchMove={e=>{if(e.touches.length>=2||pz.isZoomed){pz.onTouchMove(e);return;}}}
+        onTouchEnd={e=>{pz.onTouchEnd(e);if(pz.isZoomed)return;const s=e.currentTarget._sw;if(!s)return;const dx=e.changedTouches[0].clientX-s.x;if(Math.abs(dx)>60&&Date.now()-s.t<400){if(dx<0&&currentPage<pageImages.length-1)setCurrentPage(p=>showTwo?p+2:p+1);if(dx>0&&currentPage>0)setCurrentPage(p=>showTwo?Math.max(0,p-2):p-1);}}}>
         <img ref={imgRef} src={pageImages[currentPage]}
           onLoad={()=>{setImgLoaded(true);requestAnimationFrame(()=>drawOverlay());}}
-          style={{width:'100%',height:'95%',objectFit:'contain',display:'block',userSelect:'none'}}
+          style={{width:'100%',height:'95%',objectFit:'contain',display:'block',userSelect:'none',
+            ...pz.style, transition: pz.isZoomed ? 'none' : 'transform 0.2s'}}
           draggable={false} />
         <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none'}} />
       </div>
