@@ -5172,8 +5172,11 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
 
   const [exporting, setExporting] = useState(false);
 
+  const [exportProgress, setExportProgress] = useState('');
+
   const exportPdf = async () => {
     setExporting(true);
+    setExportProgress(`Preparing... 0/${exercises.length}`);
     try {
       const pdf = new jsPDF({orientation:'portrait', unit:'pt', format:'letter'});
       const pageW = pdf.internal.pageSize.getWidth();
@@ -5184,71 +5187,96 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
 
       // Title
       pdf.setFont('helvetica','bold');
-      pdf.setFontSize(16);
-      pdf.text(docName || 'Rhythm Exercises', margin, curY + 14);
-      curY += 30;
+      pdf.setFontSize(14);
+      pdf.text(docName || 'Rhythm Exercises', margin, curY + 12);
+      curY += 24;
       pdf.setFont('helvetica','normal');
-      pdf.setFontSize(9);
+      pdf.setFontSize(8);
       pdf.text(`${selNotes.length} notes \u00b7 ${g2s(activeGroup)} \u00b7 Key: ${key} \u00b7 ${new Date().toLocaleDateString()}`, margin, curY);
-      curY += 20;
+      curY += 16;
+
+      // Create a hidden render container (visible to html2canvas but covered by overlay)
+      const renderBox = document.createElement('div');
+      renderBox.style.cssText='position:fixed;left:0;top:0;width:'+Math.round(usableW*1.38)+'px;background:white;z-index:9998;opacity:0.01;pointer-events:none;';
+      document.body.appendChild(renderBox);
 
       for(let i=0; i<exercises.length; i++) {
-        try {
-          const tmpDiv = document.createElement('div');
-          tmpDiv.style.cssText='position:fixed;left:0;top:0;width:680px;background:white;z-index:9999;padding:8px 12px;';
-          document.body.appendChild(tmpDiv);
+        setExportProgress(`Rendering ${i+1} of ${exercises.length}...`);
+        // Allow UI to update
+        await new Promise(r=>setTimeout(r,50));
 
+        try {
+          renderBox.innerHTML = '';
           const abc = buildAbcString(exercises[i].pat, selNotes, clef, key);
-          window.ABCJS.renderAbc(tmpDiv, abc, {
-            scale:1.3, staffwidth: Math.round(usableW * 1.2),
-            paddingright:10,paddingleft:10,paddingbottom:4,paddingtop:4,
+          window.ABCJS.renderAbc(renderBox, abc, {
+            scale:0.85, staffwidth: Math.round(usableW * 1.3),
+            paddingright:6,paddingleft:6,paddingbottom:2,paddingtop:2,
             add_classes:true,
             wrap:{minSpacing:1.5, maxSpacing:2.6, preferredMeasuresPerLine:4},
           });
 
-          tmpDiv.querySelectorAll('svg path,svg rect,svg ellipse,svg line,svg text').forEach(el=>{
+          renderBox.querySelectorAll('svg path,svg rect,svg ellipse,svg line,svg text').forEach(el=>{
             el.style.fill='#000'; el.style.stroke='#000';
           });
 
-          await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+          await new Promise(r=>requestAnimationFrame(r));
 
-          const canvas = await html2canvas(tmpDiv, {
-            scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true,
+          const canvas = await html2canvas(renderBox, {
+            scale: 1.5, backgroundColor: '#ffffff', logging: false,
           });
-
-          document.body.removeChild(tmpDiv);
 
           const imgData = canvas.toDataURL('image/png');
           const drawW = usableW;
           const drawH = (canvas.height / canvas.width) * drawW;
 
-          if(curY + drawH + 20 > pageH - margin) {
+          if(curY + drawH + 16 > pageH - margin) {
             pdf.addPage();
             curY = margin;
           }
 
           pdf.setFont('helvetica','normal');
-          pdf.setFontSize(8);
-          pdf.setTextColor(120);
-          pdf.text(`${i+1}. ${exercises[i].pat.timeSig}  \u00b7  ${exercises[i].pat.section.replace(' Rhythm Patterns','')}`, margin, curY + 8);
+          pdf.setFontSize(7);
+          pdf.setTextColor(130);
+          pdf.text(`${i+1}. ${exercises[i].pat.timeSig}  \u00b7  ${exercises[i].pat.section.replace(' Rhythm Patterns','')}`, margin, curY + 7);
           pdf.setTextColor(0);
-          curY += 12;
+          curY += 10;
 
           pdf.addImage(imgData, 'PNG', margin, curY, drawW, drawH);
-          curY += drawH + 8;
+          curY += drawH + 6;
         } catch(exErr) { console.error('Failed to export exercise', i, exErr); }
       }
 
+      document.body.removeChild(renderBox);
+      setExportProgress('Saving PDF...');
+      await new Promise(r=>setTimeout(r,50));
       pdf.save((docName||'rhythm-exercises').replace(/[^a-z0-9]/gi,'_')+'.pdf');
     } catch(e) {
       console.error('PDF export failed', e);
       alert('Export failed: '+(e instanceof Error?e.message:String(e)));
     }
     setExporting(false);
+    setExportProgress('');
   };
 
   const ExercisePanelLarge = generated && exercises.length>0 && (
-    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
+    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0,position:'relative'}}>
+      {exporting && exportProgress && (
+        <div style={{position:'absolute',inset:0,zIndex:50,
+          background:'rgba(255,255,255,0.92)',backdropFilter:'blur(4px)',
+          display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:16}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.4rem',
+            letterSpacing:'0.12em',color:'#4a78ff'}}>GENERATING PDF</div>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+            fontSize:'1.1rem',color:'#666'}}>{exportProgress}</div>
+          <div style={{width:200,height:4,background:'#e0e0e0',borderRadius:2,overflow:'hidden'}}>
+            <div style={{height:'100%',background:'#4a78ff',borderRadius:2,
+              width:`${Math.round(((parseInt(exportProgress.match(/\d+/)?.[0])||0)/exercises.length)*100)}%`,
+              transition:'width 0.3s'}}/>
+          </div>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+            fontSize:'0.9rem',color:'#999',marginTop:8}}>This may take a minute for many exercises</div>
+        </div>
+      )}
       <div style={{display:'flex',alignItems:'center',gap:8,
         padding:'6px 14px',flexShrink:0,background:'#fff',borderBottom:`1px solid ${C.bord}`}}>
         <Btn onClick={()=>setGenerated(false)} style={{fontSize:'0.85rem',padding:'7px 14px',flexShrink:0}}>
@@ -5293,7 +5321,22 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
   );
 
   const ExercisePanelSmall = generated && exercises.length>0 && (
-    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0}}>
+    <div style={{display:'flex',flexDirection:'column',flex:'1 1 0',minHeight:0,position:'relative'}}>
+      {exporting && exportProgress && (
+        <div style={{position:'absolute',inset:0,zIndex:50,
+          background:'rgba(255,255,255,0.92)',backdropFilter:'blur(4px)',
+          display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'1.2rem',
+            letterSpacing:'0.12em',color:'#4a78ff'}}>GENERATING PDF</div>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:'italic',
+            fontSize:'1rem',color:'#666'}}>{exportProgress}</div>
+          <div style={{width:160,height:3,background:'#e0e0e0',borderRadius:2,overflow:'hidden'}}>
+            <div style={{height:'100%',background:'#4a78ff',borderRadius:2,
+              width:`${Math.round(((parseInt(exportProgress.match(/\d+/)?.[0])||0)/exercises.length)*100)}%`,
+              transition:'width 0.3s'}}/>
+          </div>
+        </div>
+      )}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
         padding:'6px 10px',flexShrink:0,background:'#fff',borderTop:`1px solid ${C.bord}`}}>
         <button onClick={()=>setGenerated(false)}
