@@ -348,15 +348,24 @@ function codeToAbc(code, pitchName, barAcc, key) {
   const pc=m[1],acc=m[2]||'',oct=parseInt(m[3]);
   let prefix='';
   const ka=KEY_ACC[key]||{};
-  if(acc==='##'){prefix='^^';if(barAcc)barAcc[pc]='^^';}
+  const keySig = ka[pc]; // e.g. 'F#' for F in D major
+  const keyAcc = keySig ? keySig.slice(1) : ''; // '#' or 'b' or ''
+
+  if(acc==='n'){prefix='=';if(barAcc)barAcc[pc]='=';}
+  else if(acc && acc===keyAcc){
+    // Accidental matches key signature — no prefix needed
+    prefix='';
+    if(barAcc&&barAcc[pc]){delete barAcc[pc];} // clear any bar accidental
+  }
+  else if(acc==='##'){prefix='^^';if(barAcc)barAcc[pc]='^^';}
   else if(acc==='bb'){prefix='__';if(barAcc)barAcc[pc]='__';}
   else if(acc==='#'){prefix='^';if(barAcc)barAcc[pc]='^';}
   else if(acc==='b'){prefix='_';if(barAcc)barAcc[pc]='_';}
-  else if(acc==='n'){prefix='=';if(barAcc)barAcc[pc]='=';}
   else {
+    // No accidental on the note
     let needsNat=false;
     if(barAcc&&barAcc[pc]){needsNat=true;delete barAcc[pc];}
-    else{needsNat=Object.keys(ka).some(k=>ka[k]===pc+'b'||ka[k]===pc+'#');}
+    else if(keyAcc){needsNat=true;} // key would alter this note, need natural
     prefix=needsNat?'=':'';
   }
   let abcOct=oct;
@@ -4745,10 +4754,33 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
       } catch(e){}
       return;
     }
+    const ka = KEY_ACC[key] || {};
     const abcNotes = selNotes.map(n=>{
       const m=n.match(/^([A-G])(##|bb|#|b|n)?(\d)$/); if(!m) return 'C8';
       const pc=m[1],acc=m[2]||'',oct=parseInt(m[3]);
-      const prefix=acc==='##'?'^^':acc==='bb'?'__':acc==='#'?'^':acc==='b'?'_':acc==='n'?'=':'';
+
+      // What does the key signature do to this letter?
+      const keySig = ka[pc]; // e.g. 'F#' in D major for F
+      const keyAcc = keySig ? keySig.slice(1) : ''; // '#' or 'b' or ''
+
+      let prefix = '';
+      if(acc === 'n') {
+        // Explicit natural requested
+        prefix = '=';
+      } else if(acc === keyAcc) {
+        // Matches key signature — no accidental needed
+        prefix = '';
+      } else if(!acc && keyAcc) {
+        // No accidental on note but key would alter it — show natural
+        prefix = '=';
+      } else if(!acc && !keyAcc) {
+        // Both natural — no prefix
+        prefix = '';
+      } else {
+        // Accidental differs from key — show it explicitly
+        prefix = acc==='##'?'^^':acc==='bb'?'__':acc==='#'?'^':acc==='b'?'_':'';
+      }
+
       const letter=oct<=4?pc:pc.toLowerCase();
       const octMod=oct===3?',':(oct===2?',,':(oct===1?',,,':(oct===6?"'":(oct===7?"''":''))));
       return prefix+letter+octMod+'8';
