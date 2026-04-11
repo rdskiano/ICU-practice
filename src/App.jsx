@@ -1897,14 +1897,26 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         ctx.drawImage(img, 0, 0);
         if(bu) URL.revokeObjectURL(bu);
 
-        // annotations
+        // annotations — remap from element coords to natural image coords
+        // Annotations are stored relative to the img element (which uses objectFit:contain)
+        // so we need to account for the letterboxing offset
+        const annotCanvas = annotCanvasRef.current;
+        const elW = annotCanvas ? annotCanvas.width : c.width;
+        const elH = annotCanvas ? annotCanvas.height : c.height;
+        const natW = img.naturalWidth, natH = img.naturalHeight;
+        const containScale = Math.min(elW/natW, elH/natH);
+        const dispW = natW * containScale, dispH = natH * containScale;
+        const offX = (elW - dispW) / 2, offY = (elH - dispH) / 2;
+
         (annotations[p]||[]).forEach(s=>{
           if(s.points.length<2) return;
           ctx.beginPath();
-          ctx.strokeStyle=s.color; ctx.lineWidth=Math.max(1,s.width);
+          ctx.strokeStyle=s.color; ctx.lineWidth=Math.max(1, s.width * (natW / dispW));
           ctx.lineCap='round'; ctx.lineJoin='round';
-          ctx.moveTo(s.points[0].x*c.width, s.points[0].y*c.height);
-          for(let j=1;j<s.points.length;j++) ctx.lineTo(s.points[j].x*c.width, s.points[j].y*c.height);
+          const remapX = (nx) => ((nx * elW - offX) / dispW) * natW;
+          const remapY = (ny) => ((ny * elH - offY) / dispH) * natH;
+          ctx.moveTo(remapX(s.points[0].x), remapY(s.points[0].y));
+          for(let j=1;j<s.points.length;j++) ctx.lineTo(remapX(s.points[j].x), remapY(s.points[j].y));
           ctx.stroke();
         });
 
@@ -5421,9 +5433,16 @@ function MURScreen({ piece, pageImages, profile, savedExercise, tapPos, onBack, 
               letterSpacing:'0.18em',color:C.muted}}>KEY</div>
             <div style={{position:'relative'}}>
               <select value={key} onChange={e=>{
-                setKey(e.target.value);
+                const newKey = e.target.value;
+                if(selNotes.length > 0 && newKey !== key) {
+                  setSelNotes([]);
+                  setGenerated(false);
+                  setSaveMsg('Key changed — notes cleared.');
+                  setTimeout(()=>setSaveMsg(''),2500);
+                }
+                setKey(newKey);
                 const flatKeys=['F','Bb','Eb','Ab','Db','Gb'];
-                setAccMode(flatKeys.includes(e.target.value)?'flat':'sharp');
+                setAccMode(flatKeys.includes(newKey)?'flat':'sharp');
               }}
                 style={{minWidth:80,appearance:'none',WebkitAppearance:'none',
                   background:'#fff',border:`1px solid ${C.bord}`,color:C.cream,
