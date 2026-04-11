@@ -200,7 +200,7 @@ function generateSteps(N, start, goal, inc) {
    METRONOME
 ═══════════════════════════════════════════════════════════════════════ */
 class Metro {
-  constructor(){this.ctx=null;this.id=null;this.bpm=80;this.next=0;this.subdiv=1;this.subCount=0;}
+  constructor(){this.ctx=null;this.id=null;this.bpm=80;this.next=0;this.subdiv=1;this.subCount=0;this.vol=1.0;}
   _ensureCtx(){
     if(!this.ctx||this.ctx.state==='closed'){
       this.ctx=new(window.AudioContext||window.webkitAudioContext)();
@@ -212,9 +212,9 @@ class Metro {
       const o=this.ctx.createOscillator(),g=this.ctx.createGain();
       o.connect(g);g.connect(this.ctx.destination);
       o.frequency.value = isBeat ? 1100 : 700;
-      const vol = isBeat ? 0.7 : 0.35;
+      const peak = (isBeat ? 0.7 : 0.35) * this.vol;
       g.gain.setValueAtTime(0,t);
-      g.gain.linearRampToValueAtTime(vol,t+0.003);
+      g.gain.linearRampToValueAtTime(peak,t+0.003);
       g.gain.exponentialRampToValueAtTime(0.001,t+0.06);
       o.start(t);o.stop(t+0.07);
     } catch(e){}
@@ -235,6 +235,7 @@ class Metro {
     this.next=this.ctx.currentTime+0.05;this._sched();
   }
   setSubdiv(s){ this.subdiv=s; }
+  setVolume(v){ this.vol=v; }
   setBpm(bpm){
     this.bpm=bpm;
     if(this.ctx&&this.ctx.state==='suspended') this.ctx.resume();
@@ -1733,6 +1734,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const [metroOn, setMetroOn] = useState(false);
   const [metroBpm, setMetroBpm] = useState(80);
   const [metroSubdiv, setMetroSubdiv] = useState(1);
+  const [metroVol, setMetroVol] = useState(1.0);
   const [metroExpanded, setMetroExpanded] = useState(true);
   const [metroPos, setMetroPos] = useState({x:20, y:140});
   const metroDragRef = useRef(null);
@@ -1742,6 +1744,7 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
     if(metroOn) placeMet.current.start(metroBpm); else placeMet.current.stop();
   },[metroOn]);
   useEffect(()=>{placeMet.current.setBpm(metroBpm);},[metroBpm]);
+  useEffect(()=>{placeMet.current.setVolume(metroVol);},[metroVol]);
   useEffect(()=>()=>placeMet.current.stop(),[]);
 
   // Annotation (Apple Pencil)
@@ -1957,12 +1960,14 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const [playingIdx, setPlayingIdx] = useState(null);
   const [recDuration, setRecDuration] = useState(0);
   const [recPos, setRecPos] = useState({x: null, y: null}); // null = default position
+  const [recGain, setRecGain] = useState(1.0);
   const recorderRef = useRef(null);
   const recChunks = useRef([]);
   const recTimer = useRef(null);
   const recStart = useRef(0);
   const audioRef = useRef(null);
   const recDragRef = useRef(null);
+  const recGainNode = useRef(null);
 
   const getRecMime = () => {
     // iOS Safari supports mp4, Chrome/Firefox support webm
@@ -1976,13 +1981,25 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      // Route through gain node for level control
+      const actx = new (window.AudioContext||window.webkitAudioContext)();
+      const src = actx.createMediaStreamSource(stream);
+      const gain = actx.createGain();
+      gain.gain.value = recGain;
+      recGainNode.current = gain;
+      const dest = actx.createMediaStreamDestination();
+      src.connect(gain);
+      gain.connect(dest);
+
       const mime = getRecMime();
       const opts = mime ? {mimeType:mime} : {};
-      const mr = new MediaRecorder(stream, opts);
+      const mr = new MediaRecorder(dest.stream, opts);
       recChunks.current = [];
       mr.ondataavailable = e => { if(e.data.size>0) recChunks.current.push(e.data); };
       mr.onstop = () => {
         stream.getTracks().forEach(t=>t.stop());
+        actx.close().catch(()=>{});
+        recGainNode.current = null;
         const usedMime = mr.mimeType || mime || 'audio/webm';
         const blob = new Blob(recChunks.current, {type:usedMime});
         const url = URL.createObjectURL(blob);
@@ -1991,13 +2008,18 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
         setRecDuration(0);
       };
       recorderRef.current = mr;
-      mr.start(250); // collect data every 250ms for reliability
+      mr.start(250);
       recStart.current = Date.now();
       setRecording(true);
       setRecDuration(0);
       recTimer.current = setInterval(()=>setRecDuration(d=>d+1), 1000);
     } catch(e) { console.error('mic access denied', e); }
   };
+
+  // Update gain in real-time when slider moves
+  useEffect(()=>{
+    if(recGainNode.current) recGainNode.current.gain.value = recGain;
+  },[recGain]);
 
   const stopRecording = () => {
     if(recorderRef.current && recorderRef.current.state==='recording') {
@@ -2887,6 +2909,15 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 }}>{label}</button>
               ))}
             </div>
+            {/* Volume */}
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',color:'rgba(255,255,255,0.5)',letterSpacing:'0.06em'}}>VOL</span>
+              <input type="range" min="0.2" max="2.0" step="0.1" value={metroVol}
+                onClick={e=>e.stopPropagation()}
+                onChange={e=>{e.stopPropagation();setMetroVol(parseFloat(e.target.value));}}
+                style={{flex:1,height:4,accentColor:'#a855c8',cursor:'pointer'}} />
+              <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.6rem',color:'rgba(255,255,255,0.6)',minWidth:28,textAlign:'right'}}>{Math.round(metroVol*100)}%</span>
+            </div>
             {/* Close */}
             <button onClick={e=>{e.stopPropagation();setMetroOn(false);setShowMetro(false);}} style={{
               background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.3)',
@@ -3004,6 +3035,15 @@ function ScoreViewScreen({ piece, pageImages, currentPage, setCurrentPage,
                 {fmtDur(recDuration)}
               </div>
             )}
+          </div>
+
+          {/* Input gain */}
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',color:'rgba(255,255,255,0.5)',letterSpacing:'0.06em'}}>GAIN</span>
+            <input type="range" min="0.5" max="3.0" step="0.1" value={recGain}
+              onChange={e=>setRecGain(parseFloat(e.target.value))}
+              style={{flex:1,height:4,accentColor:'#dc3232',cursor:'pointer'}} />
+            <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.6rem',color:'rgba(255,255,255,0.6)',minWidth:28,textAlign:'right'}}>{Math.round(recGain*100)}%</span>
           </div>
 
           {/* Recordings list */}
@@ -3591,18 +3631,21 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
   const [metroOn,  setMetroOn]  = useState(false);
   const [metroBpm, setMetroBpm] = useState(80);
   const [subdiv, setSubdiv] = useState(1);
+  const [ilMetroVol, setIlMetroVol] = useState(1.0);
 
   // Recorder
   const [showRecorder, setShowRecorder] = useState(false);
   const [ilRecording, setIlRecording] = useState(false);
-  const [ilRecordings, setIlRecordings] = useState([]);
-  const [ilPlayingIdx, setIlPlayingIdx] = useState(null);
+  const [ilRecMap, setIlRecMap] = useState({}); // {spotId: [{url, blob, date, duration, saved},...]}
+  const [ilPlayingKey, setIlPlayingKey] = useState(null); // 'spotId-idx'
   const [ilRecDuration, setIlRecDuration] = useState(0);
+  const [ilRecGain, setIlRecGain] = useState(1.0);
   const ilRecorderRef = useRef(null);
   const ilRecChunks = useRef([]);
   const ilRecTimer = useRef(null);
   const ilRecStart = useRef(0);
   const ilAudioRef = useRef(null);
+  const ilRecGainNode = useRef(null);
 
   const getRecMime = () => {
     if(typeof MediaRecorder==='undefined') return null;
@@ -3612,22 +3655,40 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
   };
   const ilFmtDur = s => `${Math.floor(s/60)}:${(s%60)<10?'0':''}${s%60}`;
 
+  // Current spot's recordings
+  const curSpotRecs = ilRecMap[currentSpotId] || [];
+  // All recordings across all spots
+  const allRecCount = Object.values(ilRecMap).reduce((sum,arr)=>sum+arr.length,0);
+
   const ilStartRec = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      const actx = new (window.AudioContext||window.webkitAudioContext)();
+      const src = actx.createMediaStreamSource(stream);
+      const gain = actx.createGain();
+      gain.gain.value = ilRecGain;
+      ilRecGainNode.current = gain;
+      const dest = actx.createMediaStreamDestination();
+      src.connect(gain);
+      gain.connect(dest);
+
       const mime = getRecMime();
-      const mr = new MediaRecorder(stream, mime?{mimeType:mime}:{});
+      const mr = new MediaRecorder(dest.stream, mime?{mimeType:mime}:{});
       ilRecChunks.current = [];
       mr.ondataavailable = e => { if(e.data.size>0) ilRecChunks.current.push(e.data); };
       mr.onstop = () => {
         stream.getTracks().forEach(t=>t.stop());
+        actx.close().catch(()=>{});
+        ilRecGainNode.current = null;
         const usedMime = mr.mimeType || mime || 'audio/webm';
         const blob = new Blob(ilRecChunks.current, {type:usedMime});
         const url = URL.createObjectURL(blob);
         const dur = Math.round((Date.now()-ilRecStart.current)/1000);
-        const spotId = currentSpotIdRef.current;
-        const spot = spots.find(s=>s.id===spotId);
-        setIlRecordings(prev=>[{url, blob, date:new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}), duration:dur, spotId, spotLabel:spot?.label||`Spot ${spotId}`}, ...prev]);
+        const sid = currentSpotIdRef.current;
+        setIlRecMap(prev=>({
+          ...prev,
+          [sid]: [...(prev[sid]||[]), {url, blob, date:new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}), duration:dur}],
+        }));
         setIlRecDuration(0);
       };
       ilRecorderRef.current = mr;
@@ -3645,25 +3706,30 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
     clearInterval(ilRecTimer.current);
   };
 
-  const ilPlayRec = (idx) => {
+  const ilPlayRec = (spotId, idx) => {
+    const key = spotId+'-'+idx;
     if(ilAudioRef.current) { ilAudioRef.current.pause(); ilAudioRef.current=null; }
-    if(ilPlayingIdx===idx) { setIlPlayingIdx(null); return; }
+    if(ilPlayingKey===key) { setIlPlayingKey(null); return; }
     try {
-      const a = new Audio(); a.src = ilRecordings[idx].url;
-      a.onended=()=>setIlPlayingIdx(null); a.onerror=()=>setIlPlayingIdx(null);
-      a.play().catch(()=>setIlPlayingIdx(null));
-      ilAudioRef.current = a; setIlPlayingIdx(idx);
-    } catch(e) { setIlPlayingIdx(null); }
+      const recs = ilRecMap[spotId]||[];
+      const a = new Audio(); a.src = recs[idx].url;
+      a.onended=()=>setIlPlayingKey(null); a.onerror=()=>setIlPlayingKey(null);
+      a.play().catch(()=>setIlPlayingKey(null));
+      ilAudioRef.current = a; setIlPlayingKey(key);
+    } catch(e) { setIlPlayingKey(null); }
   };
 
-  const ilDeleteRec = (idx) => {
-    if(ilPlayingIdx===idx) { ilAudioRef.current?.pause(); setIlPlayingIdx(null); }
-    URL.revokeObjectURL(ilRecordings[idx].url);
-    setIlRecordings(prev=>prev.filter((_,i)=>i!==idx));
+  const ilDeleteRec = (spotId, idx) => {
+    const key = spotId+'-'+idx;
+    if(ilPlayingKey===key) { ilAudioRef.current?.pause(); setIlPlayingKey(null); }
+    const recs = ilRecMap[spotId]||[];
+    URL.revokeObjectURL(recs[idx].url);
+    setIlRecMap(prev=>({...prev, [spotId]: prev[spotId].filter((_,i)=>i!==idx)}));
   };
 
-  const ilSaveRec = async (idx) => {
-    const rec = ilRecordings[idx];
+  const ilSaveRec = async (spotId, idx) => {
+    const recs = ilRecMap[spotId]||[];
+    const rec = recs[idx];
     if(rec.saved) return;
     try {
       const reader = new FileReader();
@@ -3674,17 +3740,18 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
       const audioKey = `pfn_audio_${Date.now()}`;
       localStorage.setItem(audioKey, b64);
       const prof = profile || getProfile();
+      const spot = spots.find(s=>s.id===spotId);
       if(prof.email) {
         await sbPost('/rest/v1/practice_logs', {
           user_email: prof.email,
           piece_id: piece?.id||null,
-          spot_id: rec.spotId||null,
+          spot_id: spotId||null,
           strategy: 'recording',
           session_date: localDate(),
-          notes: `🎙 Recording (${ilFmtDur(rec.duration)}) — ${rec.spotLabel} [audio:${audioKey}]`,
+          notes: `🎙 Take ${idx+1} — ${spot?.label||'Spot '+spotId} (${ilFmtDur(rec.duration)}) [audio:${audioKey}]`,
         });
       }
-      setIlRecordings(prev=>prev.map((r,i)=>i===idx?{...r,saved:true}:r));
+      setIlRecMap(prev=>({...prev, [spotId]: prev[spotId].map((r,i)=>i===idx?{...r,saved:true}:r)}));
     } catch(e) { console.error('save failed', e); }
   };
   useEffect(()=>{ currentSpotIdRef.current = currentSpotId; },[currentSpotId]);
@@ -3706,6 +3773,10 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
   },[metroBpm]);
   // Stop metro on unmount
   useEffect(()=>()=>metro.current.stop(),[]);
+  // Metro volume sync
+  useEffect(()=>{metro.current.setVolume(ilMetroVol);},[ilMetroVol]);
+  // Recorder gain sync
+  useEffect(()=>{if(ilRecGainNode.current) ilRecGainNode.current.gain.value = ilRecGain;},[ilRecGain]);
 
   const shuffle = arr => {
     const a=[...arr];
@@ -3823,19 +3894,8 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
           fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.85rem',
           letterSpacing:'0.1em'}}>← EXIT</button>}
         center={currentSpotId ? `SPOT ${currentSpotId} OF ${spots.length}` : 'INTERLEAVED'}
-        right={<div style={{display:'flex',gap:6,alignItems:'center'}}>
-          <button onClick={()=>setShowRecorder(true)} style={{
-            background: ilRecording ? 'rgba(220,50,50,0.18)' : 'rgba(220,50,50,0.08)',
-            border: `1px solid ${ilRecording ? 'rgba(220,50,50,0.35)' : 'rgba(220,50,50,0.18)'}`,
-            color: ilRecording ? '#dc3232' : '#c87070',
-            padding:'3px 8px',borderRadius:10,
-            fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',
-            letterSpacing:'0.06em',cursor:'pointer',
-            WebkitTapHighlightColor:'transparent',
-          }}>{ilRecording ? '⏺ REC' : '🎙'}</button>
-          <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',color:C.muted}}>
-          {completedCount}/{spots.length} done</span>
-        </div>}
+        right={<span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.75rem',color:C.muted}}>
+          {completedCount}/{spots.length} done</span>}
       />
 
       {/* Verdict + metro bar — compact single row */}
@@ -3915,6 +3975,10 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
               flexShrink:0,WebkitTapHighlightColor:'transparent',
             }}>{metroOn?'⏸':'▶'}</button>
             <SubdivBtns subdiv={subdiv} setSubdiv={setSubdiv} metro={metro} metroOn={metroOn} bpm={metroBpm} compact />
+            <input type="range" min="0.2" max="2.0" step="0.1" value={ilMetroVol}
+              onChange={e=>setIlMetroVol(parseFloat(e.target.value))}
+              title={`Volume: ${Math.round(ilMetroVol*100)}%`}
+              style={{width:50,height:4,accentColor:C.accent,cursor:'pointer',flexShrink:0}} />
             <button onClick={()=>{
               if(!currentSpotId) return;
               setSpots(prev=>prev.map(s=>s.id===currentSpotId?{...s,bpm:metroBpm}:s));
@@ -3927,6 +3991,15 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
               letterSpacing:'0.08em',cursor:'pointer',
               WebkitTapHighlightColor:'transparent',whiteSpace:'nowrap',
             }}>{alreadyLocked?'✓ SET':'SET TEMPO'}</button>
+            <div style={{width:1,height:24,background:C.bord,flexShrink:0}}/>
+            <button onClick={()=>setShowRecorder(r=>!r)} style={{
+              background: ilRecording ? 'rgba(220,50,50,0.2)' : showRecorder ? 'rgba(220,50,50,0.12)' : '#f0f0f0',
+              border: `1.5px solid ${ilRecording ? '#dc3232' : showRecorder ? '#dc3232' : C.bord2}`,
+              color: ilRecording ? '#dc3232' : showRecorder ? '#dc3232' : C.cream,
+              padding:'4px 10px',cursor:'pointer',flexShrink:0,borderRadius:6,
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.7rem',letterSpacing:'0.06em',
+              WebkitTapHighlightColor:'transparent',
+            }}>{ilRecording ? '⏺ REC' : '🎙 RECORD'}</button>
           </>);
         })()}
 
@@ -3952,13 +4025,14 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
             position:'absolute',top:8,right:8,zIndex:30,
             background:'rgba(50,50,50,0.95)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',
             borderRadius:16,padding:'12px 14px',boxShadow:'0 4px 24px rgba(0,0,0,0.25)',
-            width:220,display:'flex',flexDirection:'column',gap:8,
+            width:240,display:'flex',flexDirection:'column',gap:8,
           }}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.8rem',letterSpacing:'0.1em',color:'#fff'}}>
-                🎙 RECORDER {currentSpotId ? `· Spot ${currentSpotId}` : ''}
+                🎙 {(()=>{const s=spots.find(sp=>sp.id===currentSpotId); return s?.label||('Spot '+currentSpotId);})()}
+                {curSpotRecs.length>0 && <span style={{color:'#dc3232',marginLeft:4}}>({curSpotRecs.length} take{curSpotRecs.length!==1?'s':''})</span>}
               </div>
-              <button onClick={()=>{if(ilRecording)ilStopRec();setShowRecorder(false);}} style={{
+              <button onClick={()=>setShowRecorder(false)} style={{
                 background:'none',border:'none',color:'#999',fontSize:'1rem',cursor:'pointer',padding:'0 2px',
               }}>✕</button>
             </div>
@@ -3984,33 +4058,47 @@ function InterleavedSessionScreen({ pageImages, spots: initialSpots, rotationMod
                 </div>
               )}
             </div>
-            {ilRecordings.length > 0 && (
-              <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:140,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
-                {ilRecordings.map((r,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:6,
-                    padding:'5px 6px',background:'rgba(255,255,255,0.08)',borderRadius:6}}>
-                    <button onClick={()=>ilPlayRec(i)} style={{
-                      width:26,height:26,borderRadius:'50%',
-                      background:ilPlayingIdx===i?'#dc3232':'rgba(255,255,255,0.15)',
-                      border:'1px solid rgba(255,255,255,0.3)',color:'#fff',fontSize:'0.7rem',
+            {/* Input gain */}
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',color:'rgba(255,255,255,0.5)',letterSpacing:'0.06em'}}>GAIN</span>
+              <input type="range" min="0.5" max="3.0" step="0.1" value={ilRecGain}
+                onChange={e=>setIlRecGain(parseFloat(e.target.value))}
+                style={{flex:1,height:4,accentColor:'#dc3232',cursor:'pointer'}} />
+              <span style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.6rem',color:'rgba(255,255,255,0.6)',minWidth:28,textAlign:'right'}}>{Math.round(ilRecGain*100)}%</span>
+            </div>
+            {/* This spot's recordings */}
+            {curSpotRecs.length > 0 && (
+              <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',color:'rgba(255,255,255,0.4)',letterSpacing:'0.08em'}}>THIS SPOT'S TAKES</div>
+                {curSpotRecs.map((r,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:5,
+                    padding:'4px 6px',background:'rgba(255,255,255,0.08)',borderRadius:6}}>
+                    <button onClick={()=>ilPlayRec(currentSpotId,i)} style={{
+                      width:24,height:24,borderRadius:'50%',
+                      background:ilPlayingKey===currentSpotId+'-'+i?'#dc3232':'rgba(255,255,255,0.15)',
+                      border:'1px solid rgba(255,255,255,0.3)',color:'#fff',fontSize:'0.65rem',
                       cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
-                    }}>{ilPlayingIdx===i?'⏸':'▶'}</button>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',color:'#fff',letterSpacing:'0.04em'}}>
-                        {r.spotLabel} · {r.date} · {ilFmtDur(r.duration)}
-                      </div>
+                    }}>{ilPlayingKey===currentSpotId+'-'+i?'⏸':'▶'}</button>
+                    <div style={{flex:1,fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.6rem',color:'#fff'}}>
+                      Take {i+1} · {ilFmtDur(r.duration)}
                     </div>
-                    <button onClick={()=>ilDeleteRec(i)} style={{
-                      background:'none',border:'none',color:'#888',fontSize:'0.8rem',cursor:'pointer',padding:'2px',
+                    <button onClick={()=>ilDeleteRec(currentSpotId,i)} style={{
+                      background:'none',border:'none',color:'#888',fontSize:'0.75rem',cursor:'pointer',padding:'1px 3px',
                     }}>✕</button>
-                    <button onClick={()=>ilSaveRec(i)} style={{
+                    <button onClick={()=>ilSaveRec(currentSpotId,i)} style={{
                       background:r.saved?'rgba(46,170,87,0.3)':'rgba(255,255,255,0.15)',
-                      border:'1px solid rgba(255,255,255,0.3)',borderRadius:5,padding:'2px 6px',
-                      fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.55rem',color:'#fff',
+                      border:'1px solid rgba(255,255,255,0.3)',borderRadius:4,padding:'2px 5px',
+                      fontFamily:"'Bebas Neue',sans-serif",fontSize:'0.5rem',color:'#fff',
                       cursor:r.saved?'default':'pointer',
                     }}>{r.saved?'✓':'SAVE'}</button>
                   </div>
                 ))}
+              </div>
+            )}
+            {/* Summary of all spots */}
+            {allRecCount > curSpotRecs.length && (
+              <div style={{fontFamily:"'Inconsolata',monospace",fontSize:'0.6rem',color:'rgba(255,255,255,0.35)',textAlign:'center'}}>
+                {allRecCount} total takes across {Object.keys(ilRecMap).filter(k=>ilRecMap[k].length>0).length} spots
               </div>
             )}
           </div>
